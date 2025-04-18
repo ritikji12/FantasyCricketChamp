@@ -560,11 +560,25 @@ export default function AdminPage() {
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="text-sm text-gray-500">{teamData.rank}</div>
                             </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-right">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                                onClick={() => deleteTeamMutation.mutate(teamData.team.id)}
+                                disabled={deleteTeamMutation.isPending}
+                              >
+                                {deleteTeamMutation.isPending ? (
+                                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                ) : null}
+                                Delete
+                              </Button>
+                            </td>
                           </tr>
                         ))}
                         {teams.length === 0 && (
                           <tr>
-                            <td colSpan={5} className="px-4 py-3 text-center text-sm text-gray-500">
+                            <td colSpan={6} className="px-4 py-3 text-center text-sm text-gray-500">
                               No teams registered yet
                             </td>
                           </tr>
