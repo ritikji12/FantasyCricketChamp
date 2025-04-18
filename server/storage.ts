@@ -19,6 +19,7 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  getPlayerCategories(): Promise<typeof playerCategories.$inferSelect[]>;
   
   // Contest operations
   getContests(): Promise<Contest[]>;
@@ -78,6 +79,11 @@ export class DatabaseStorage implements IStorage {
   async createUser(user: InsertUser): Promise<User> {
     const [newUser] = await db.insert(users).values(user).returning();
     return newUser;
+  }
+
+  async getPlayerCategories(): Promise<typeof playerCategories.$inferSelect[]> {
+    const result = await db.select().from(playerCategories);
+    return result;
   }
   
   // Contest Operations
