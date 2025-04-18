@@ -380,7 +380,18 @@ export class DatabaseStorage implements IStorage {
     return sortedTeams;
   }
 
-  async getAllTeamsWithPlayers(): Promise<TeamWithPlayers[]> {
+  async getCurrentMatch() {
+  const [match] = await db
+    .select()
+    .from(matches)
+    .where(eq(matches.status, 'live'))
+    .orderBy(desc(matches.createdAt))
+    .limit(1);
+  
+  return match;
+}
+
+async getAllTeamsWithPlayers(): Promise<TeamWithPlayers[]> {
     const allTeams = await db
       .select({
         id: teams.id,
