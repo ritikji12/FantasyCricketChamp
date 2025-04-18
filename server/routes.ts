@@ -139,10 +139,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 async function initializeDatabase() {
   try {
     if ((await storage.getplayercategories()).length === 0) {
-      const ar = await storage.createplayercategory({ name: "All Rounder" });
-      const ba = await storage.createplayercategory({ name: "Batsman" });
-      const bo = await storage.createplayercategory({ name: "Bowler" });
-      const wk = await storage.createplayercategory({ name: "Wicketkeeper" });
+      const ar = await storage.createPlayerCategory({ name: "All Rounder" });
+      const ba = await storage.createPlayerCategory({ name: "Batsman" });
+      const bo = await storage.createPlayerCategory({ name: "Bowler" });
+      const wk = await storage.createPlayerCategory({ name: "Wicketkeeper" });
       await storage.createPlayer({ name: "Ankur", categoryId: ar.id, creditPoints:200, performancePoints:200, runs:75, wickets:2 });
       // ... insert other players similarly ...
       await storage.createMatch({ team1:"Team Dominator", team2:"Team Destroyer", status:"live" });
