@@ -588,18 +588,25 @@ export default function TeamCreatePage() {
                 </div>
               </div>
               
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowPreview(false)}>Edit Team</Button>
-                <Button 
-                  className="bg-[#2ABDC0] hover:bg-[#2ABDC0]/90"
-                  onClick={handleConfirmTeam}
-                  disabled={createTeamMutation.isPending}
-                >
-                  {createTeamMutation.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : null}
-                  Confirm Team
-                </Button>
+              <DialogFooter className="flex-col space-y-2 sm:space-y-0">
+                <div className="flex flex-col sm:flex-row gap-2 w-full justify-end">
+                  <Button variant="outline" onClick={() => setShowPreview(false)}>
+                    Edit Team
+                  </Button>
+                  <Button 
+                    className="bg-[#2ABDC0] hover:bg-[#2ABDC0]/90"
+                    onClick={handleConfirmTeam}
+                    disabled={createTeamMutation.isPending}
+                  >
+                    {createTeamMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    Save & Join Contest
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500 text-center sm:text-right">
+                  After joining the contest, you'll be able to view your ranking and players' scores.
+                </p>
               </DialogFooter>
             </DialogContent>
           </Dialog>
