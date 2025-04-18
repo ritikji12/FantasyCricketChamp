@@ -1,23 +1,25 @@
-import express, { Express } from 'express';
-import { createServer, type Server } from 'http';
-import playersRouter from './routes/players';
-import teamsRouter from './routes/teams';
+import express from 'express';
+import session from 'express-session';
+import { createServer } from 'http';
+import { registerRoutes } from './route';    // <-- your single route file
+import { db } from './db';
 
-const app: Express = express();
+async function main() {
+  const app = express();
 
-// Middleware setup (e.g., JSON parser, authentication, etc.)
-app.use(express.json());
+  app.use(express.json());
+  // (Any other global middleware you need here)
 
-// Register routes from players and teams
-app.use('/api', playersRouter);
-app.use('/api', teamsRouter);
+  // wire up all of your routes in one go:
+  const httpServer = await registerRoutes(app);
 
-// Optionally add more routes or middleware
+  const port = process.env.PORT ?? 4000;
+  httpServer.listen(port, () => {
+    console.log(`🚀 Server listening on http://localhost:${port}`);
+  });
+}
 
-// Start the server
-const server: Server = createServer(app);
-server.listen(3000, () => {
-  console.log('Server running on http://localhost:3000');
+main().catch(err => {
+  console.error("❌ Failed to start server", err);
+  process.exit(1);
 });
-
-export default server;
