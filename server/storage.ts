@@ -120,7 +120,7 @@ export class DatabaseStorage implements IStorage {
   async updatePlayerPoints(playerData: UpdatePlayerPoints): Promise<Player> {
     const { id, runs, wickets, points } = playerData;
 
-    const updatedValues: any = { points };
+    const updatedValues: any = { performancePoints: points };
     if (runs !== undefined) updatedValues.runs = runs;
     if (wickets !== undefined) updatedValues.wickets = wickets;
 
@@ -131,6 +131,16 @@ export class DatabaseStorage implements IStorage {
       .returning();
 
     return updatedPlayer;
+  }
+
+  async addPlayerToTeam(teamPlayer: InsertTeamPlayer): Promise<void> {
+    const player = await this.getPlayer(teamPlayer.playerId);
+    if (!player) throw new Error("Player not found");
+
+    await db.insert(teamPlayers).values({
+      ...teamPlayer,
+      creditPointsAtSelection: player.creditPoints
+    });
   }
 
   // Teams
@@ -224,15 +234,24 @@ export class DatabaseStorage implements IStorage {
 
   // Rankings and stats
   async calculateTeamPoints(teamId: number): Promise<number> {
-    const teamPlayers = await this.getTeamPlayers(teamId);
-    return teamPlayers.reduce((total, player) => {
-      // Apply 2x multiplier for captain, 1.5x for vice-captain
-      if (player.isCaptain) {
-        return total + (player.points * 2);
-      } else if (player.isViceCaptain) {
-        return total + (player.points * 1.5);
+    const result = await db
+      .select({
+        playerId: players.id,
+        performancePoints: players.performancePoints,
+        isCaptain: teamPlayers.isCaptain,
+        isViceCaptain: teamPlayers.isViceCaptain,
+      })
+      .from(teamPlayers)
+      .innerJoin(players, eq(teamPlayers.playerId, players.id))
+      .where(eq(teamPlayers.teamId, teamId));
+
+    return result.reduce((total, record) => {
+      if (record.isCaptain) {
+        return total + (record.performancePoints * 2);
+      } else if (record.isViceCaptain) {
+        return total + (record.performancePoints * 1.5);
       } else {
-        return total + player.points;
+        return total + record.performancePoints;
       }
     }, 0);
   }

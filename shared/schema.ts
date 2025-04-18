@@ -24,7 +24,8 @@ export const players = pgTable("players", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   categoryId: integer("category_id").notNull().references(() => playerCategories.id),
-  points: integer("points").notNull().default(0),
+  creditPoints: integer("credit_points").notNull().default(0),
+  performancePoints: integer("performance_points").notNull().default(0),
   runs: integer("runs").default(0),
   wickets: integer("wickets").default(0),
 });
@@ -43,6 +44,7 @@ export const teamPlayers = pgTable("team_players", {
   playerId: integer("player_id").notNull().references(() => players.id),
   isCaptain: boolean("is_captain").default(false).notNull(),
   isViceCaptain: boolean("is_vice_captain").default(false).notNull(),
+  creditPointsAtSelection: integer("credit_points_at_selection").notNull(),
 }, (t) => ({
   pk: primaryKey({ columns: [t.teamId, t.playerId] }),
 }));
