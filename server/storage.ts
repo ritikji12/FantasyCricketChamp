@@ -1,196 +1,353 @@
+import { users, players, teams, teamPlayers, matches, playerCategories, 
+  type User, type InsertUser, type Player, type InsertPlayer, 
+  type Team, type InsertTeam, type TeamPlayer, type InsertTeamPlayer, 
+  type Match, type PlayerCategory, type InsertPlayerCategory, type UpdatePlayerPoints } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
-import {
-  users,
-  players,
-  teams,
-  teamPlayers,
-  playerCategories,
-  matches,
-  type User,
-  type InsertUser,
-  type Player,
-  type InsertPlayer,
-  type Team,
-  type InsertTeam,
-  type TeamPlayer,
-  type InsertTeamPlayer,
-  type PlayerCategory,
-  type InsertPlayerCategory,
-  type UpdatePlayerPoints,
-  type TeamWithPlayers,
-  type TeamRanking,
-  type Match
-} from "@shared/schema";
+import { eq, and, sql, desc, asc } from "drizzle-orm";
 import session from "express-session";
-import connectPg from "connect-pg-simple";
-import { Store } from "express-session";
-import { pool } from "./db";
+import createMemoryStore from "memorystore";
 
-const PostgresStore = connectPg(session);
+const MemoryStore = createMemoryStore(session);
 
 export interface IStorage {
   // Users
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
 
-  // Categories
+  // Player Categories
   getPlayerCategories(): Promise<PlayerCategory[]>;
   getPlayerCategoryByName(name: string): Promise<PlayerCategory | undefined>;
-  createPlayerCategory(data: InsertPlayerCategory): Promise<PlayerCategory>;
+  createPlayerCategory(category: InsertPlayerCategory): Promise<PlayerCategory>;
 
   // Players
-  getAllPlayers(): Promise<Player[]>;
   getPlayersByCategory(categoryId: number): Promise<Player[]>;
-  createPlayer(data: InsertPlayer): Promise<Player>;
-  updatePlayerPoints(data: UpdatePlayerPoints): Promise<Player>;
-  getPlayerSelectionStats(): Promise<{ playerId: number; count: number; percentage: number }[]>;
+  getAllPlayers(): Promise<Player[]>;
+  getPlayer(id: number): Promise<Player | undefined>;
+  createPlayer(player: InsertPlayer): Promise<Player>;
+  updatePlayerPoints(playerData: UpdatePlayerPoints): Promise<Player>;
 
   // Teams
-  getTeamsWithPlayers(): Promise<TeamWithPlayers[]>;
-  getTeam(id: number): Promise<Team | undefined>;
   getUserTeam(userId: number): Promise<Team | undefined>;
-  getTeamPlayers(teamId: number): Promise<TeamWithPlayers["players"]>;
-  calculateTeamPoints(teamId: number): Promise<number>;
-  getTeamRank(teamId: number): Promise<number>;
-  createTeam(data: InsertTeam): Promise<Team>;
-  addPlayerToTeam(data: InsertTeamPlayer): Promise<void>;
+  getTeam(id: number): Promise<Team | undefined>;
+  createTeam(team: InsertTeam): Promise<Team>;
+  addPlayerToTeam(teamPlayer: InsertTeamPlayer): Promise<void>;
+  getTeamPlayers(teamId: number): Promise<(Player & { isCaptain?: boolean, isViceCaptain?: boolean })[]>;
+  getAllTeams(): Promise<Team[]>;
+  getTeamsWithPlayers(): Promise<any[]>;
+  deleteTeam(teamId: number): Promise<void>;
 
   // Matches
+  getMatch(id: number): Promise<Match | undefined>;
   getCurrentMatch(): Promise<Match | undefined>;
-  createMatch(data: Partial<Match>): Promise<Match>;
+  createMatch(match: Match): Promise<Match>;
 
-  // Leaderboard
-  getLeaderboard(): Promise<TeamRanking[]>;
+  // Rankings and stats
+  calculateTeamPoints(teamId: number): Promise<number>;
+  getLeaderboard(): Promise<any[]>;
+  getTeamRank(teamId: number): Promise<number>;
+  getPlayerSelectionStats(): Promise<{ playerId: number, count: number, percentage: number }[]>;
 
   // Session
-  sessionStore: Store;
+  sessionStore: any; // Express session store
 }
 
 export class DatabaseStorage implements IStorage {
-  sessionStore: Store;
+  sessionStore: any; // Express session store
 
   constructor() {
-    this.sessionStore = new PostgresStore({ pool, createTableIfMissing: true });
+    this.sessionStore = new MemoryStore({
+      checkPeriod: 86400000, // 24 hours
+    });
   }
 
   // Users
-  async getUser(id: number) {
-    const [u] = await db.select().from(users).where(eq(users.id, id));
-    return u;
-  }
-  async getUserByUsername(username: string) {
-    const [u] = await db.select().from(users).where(eq(users.username, username));
-    return u;
-  }
-  async createUser(user: InsertUser) {
-    const [u] = await db.insert(users).values(user).returning();
-    return u;
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
 
-  // Categories
-  async getPlayerCategories() {
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    const [newUser] = await db.insert(users).values(user).returning();
+    return newUser;
+  }
+
+  // Player Categories
+  async getPlayerCategories(): Promise<PlayerCategory[]> {
     return db.select().from(playerCategories);
   }
-  async getPlayerCategoryByName(name: string) {
-    const [c] = await db.select().from(playerCategories).where(eq(playerCategories.name, name));
-    return c;
+
+  async getPlayerCategoryByName(name: string): Promise<PlayerCategory | undefined> {
+    const [category] = await db.select().from(playerCategories).where(eq(playerCategories.name, name));
+    return category;
   }
-  async createPlayerCategory(data: InsertPlayerCategory) {
-    const [c] = await db.insert(playerCategories).values(data).returning();
-    return c;
+
+  async createPlayerCategory(category: InsertPlayerCategory): Promise<PlayerCategory> {
+    const [newCategory] = await db.insert(playerCategories).values(category).returning();
+    return newCategory;
   }
 
   // Players
-  async getAllPlayers() {
-    return db.select().from(players);
+  async getPlayersByCategory(categoryId: number): Promise<Player[]> {
+    return db.select({
+      id: players.id,
+      name: players.name,
+      categoryId: players.categoryId,
+      selectionPoints: players.selectionPoints,
+      creditPoints: players.creditPoints,
+      performancePoints: players.performancePoints,
+      runs: players.runs,
+      wickets: players.wickets
+    }).from(players).where(eq(players.categoryId, categoryId));
   }
-  async getPlayersByCategory(categoryId: number) {
-    return db.select().from(players).where(eq(players.categoryId, categoryId));
+
+  async getAllPlayers(): Promise<Player[]> {
+    return db.select({
+      id: players.id,
+      name: players.name,
+      categoryId: players.categoryId,
+      selectionPoints: players.selectionPoints,
+      creditPoints: players.creditPoints,
+      performancePoints: players.performancePoints,
+      runs: players.runs,
+      wickets: players.wickets
+    }).from(players);
   }
-  async createPlayer(data: InsertPlayer) {
-    const [p] = await db.insert(players).values(data).returning();
-    return p;
+
+  async updateMatchStatus(matchId: number, status: string): Promise<void> {
+    await db.update(matches)
+      .set({ status })
+      .where(eq(matches.id, matchId));
   }
-  async updatePlayerPoints(data: UpdatePlayerPoints) {
-    const [p] = await db
+
+  async getPlayer(id: number): Promise<Player | undefined> {
+    const [player] = await db.select().from(players).where(eq(players.id, id));
+    return player;
+  }
+
+  async createPlayer(player: InsertPlayer): Promise<Player> {
+    const [newPlayer] = await db.insert(players).values(player).returning();
+    return newPlayer;
+  }
+
+  async updatePlayerPoints(playerData: UpdatePlayerPoints): Promise<Player> {
+    const { id, runs, wickets, points } = playerData;
+
+    const updatedValues: any = { 
+      credit_points: points,
+      performance_points: points 
+    };
+    if (runs !== undefined) updatedValues.runs = runs;
+    if (wickets !== undefined) updatedValues.wickets = wickets;
+
+    const [updatedPlayer] = await db
       .update(players)
-      .set({ runs: data.runs, wickets: data.wickets, performancePoints: data.points })
-      .where(eq(players.id, data.id))
+      .set(updatedValues)
+      .where(eq(players.id, id))
       .returning();
-    return p;
+
+    return updatedPlayer;
   }
-  async getPlayerSelectionStats() {
-    const stats = await db
-      .select({ playerId: teamPlayers.playerId, count: db.sql`COUNT(*)::int` })
-      .from(teamPlayers)
-      .groupBy(teamPlayers.playerId);
-    const totalTeams = (await db.select({ count: db.sql`COUNT(DISTINCT team_id)::int` }).from(teamPlayers))[0].count;
-    return stats.map(s => ({ playerId: s.playerId, count: s.count, percentage: Math.round((s.count / totalTeams) * 100) }));
+
+  async addPlayerToTeam(teamPlayer: InsertTeamPlayer): Promise<void> {
+    const player = await this.getPlayer(teamPlayer.playerId);
+    if (!player) throw new Error("Player not found");
+
+    await db.insert(teamPlayers).values({
+      ...teamPlayer,
+      creditPointsAtSelection: player.creditPoints
+    });
   }
 
   // Teams
-  async getTeamsWithPlayers() {
-    const list = await db.select().from(teams);
-    return Promise.all(list.map(async t => {
-      const pls = await this.getTeamPlayers(t.id);
-      const pts = await this.calculateTeamPoints(t.id);
-      return { ...t, players: pls, totalPoints: pts };
-    }));
+  async getUserTeam(userId: number): Promise<Team | undefined> {
+    const [team] = await db.select().from(teams).where(eq(teams.userId, userId));
+    return team;
   }
-  async getTeam(id: number) {
-    const [t] = await db.select().from(teams).where(eq(teams.id, id));
-    return t;
+
+  async getTeam(id: number): Promise<Team | undefined> {
+    const [team] = await db.select().from(teams).where(eq(teams.id, id));
+    return team;
   }
-  async getUserTeam(userId: number) {
-    const [t] = await db.select().from(teams).where(eq(teams.userId, userId));
-    return t;
+
+  async createTeam(team: InsertTeam): Promise<Team> {
+    const [newTeam] = await db.insert(teams).values(team).returning();
+    return newTeam;
   }
-  async getTeamPlayers(teamId: number) {
-    return db
-      .select({ ...players, isCaptain: teamPlayers.isCaptain, isViceCaptain: teamPlayers.isViceCaptain })
+
+  async addPlayerToTeam(teamPlayer: InsertTeamPlayer): Promise<void> {
+    await db.insert(teamPlayers).values(teamPlayer);
+  }
+
+  async getTeamPlayers(teamId: number): Promise<(Player & { isCaptain?: boolean, isViceCaptain?: boolean })[]> {
+    const result = await db
+      .select({
+        id: players.id,
+        name: players.name,
+        categoryId: players.categoryId,
+        points: players.creditPoints,
+        runs: players.runs,
+        wickets: players.wickets,
+        isCaptain: teamPlayers.isCaptain,
+        isViceCaptain: teamPlayers.isViceCaptain
+      })
       .from(teamPlayers)
       .innerJoin(players, eq(teamPlayers.playerId, players.id))
       .where(eq(teamPlayers.teamId, teamId));
+
+    return result;
   }
-  async calculateTeamPoints(teamId: number) {
-    const pls = await this.getTeamPlayers(teamId);
-    return pls.reduce((sum, p) => sum + (p.isCaptain ? p.performancePoints * 2 : p.isViceCaptain ? p.performancePoints * 1.5 : p.performancePoints), 0);
+
+  async getAllTeams(): Promise<Team[]> {
+    return db.select().from(teams);
   }
-  async getTeamRank(teamId: number) {
-    const lb = await this.getLeaderboard();
-    return lb.findIndex(e => e.teamId === teamId) + 1;
+
+  async getTeamsWithPlayers(): Promise<any[]> {
+    const allTeams = await this.getAllTeams();
+    const result = [];
+
+    for (const team of allTeams) {
+      const user = await this.getUser(team.userId);
+      const teamPlayers = await this.getTeamPlayers(team.id);
+      const totalPoints = await this.calculateTeamPoints(team.id);
+      const rank = await this.getTeamRank(team.id);
+
+      result.push({
+        team,
+        user,
+        players: teamPlayers,
+        totalPoints,
+        rank,
+        playerCount: teamPlayers.length
+      });
+    }
+
+    return result.sort((a, b) => a.rank - b.rank);
   }
-  async createTeam(data: InsertTeam) {
-    const [t] = await db.insert(teams).values(data).returning();
-    return t;
-  }
-  async addPlayerToTeam(data: InsertTeamPlayer) {
-    await db.insert(teamPlayers).values(data);
+
+  async deleteTeam(teamId: number): Promise<void> {
+    // First delete team players (foreign key constraint)
+    await db.delete(teamPlayers).where(eq(teamPlayers.teamId, teamId));
+    // Then delete the team
+    await db.delete(teams).where(eq(teams.id, teamId));
   }
 
   // Matches
-  async getCurrentMatch() {
-    const [m] = await db
-      .select()
-      .from(matches)
-      .where(eq(matches.status, 'live'))
-      .orderBy(desc(matches.createdAt))
-      .limit(1);
-    return m;
-  }
-  async createMatch(data: Partial<Match>) {
-    const [m] = await db.insert(matches).values(data).returning();
-    return m;
+  async getMatch(id: number): Promise<Match | undefined> {
+    const [match] = await db.select().from(matches).where(eq(matches.id, id));
+    return match;
   }
 
-  // Leaderboard
-  async getLeaderboard() {
-    const tw = await this.getTeamsWithPlayers();
-    return tw
-      .map(t => ({ teamId: t.id, teamName: t.name, totalPoints: t.totalPoints }))
-      .sort((a, b) => b.totalPoints - a.totalPoints);
+  async getCurrentMatch(): Promise<Match | undefined> {
+    const [match] = await db.select().from(matches).where(eq(matches.status, 'live'));
+    return match;
+  }
+
+  async createMatch(match: Match): Promise<Match> {
+    const [newMatch] = await db.insert(matches).values(match).returning();
+    return newMatch;
+  }
+
+  // Rankings and stats
+  async calculateTeamPoints(teamId: number): Promise<number> {
+    const result = await db
+      .select({
+        playerId: players.id,
+        performancePoints: players.performancePoints,
+        isCaptain: teamPlayers.isCaptain,
+        isViceCaptain: teamPlayers.isViceCaptain,
+      })
+      .from(teamPlayers)
+      .innerJoin(players, eq(teamPlayers.playerId, players.id))
+      .where(eq(teamPlayers.teamId, teamId));
+
+    return result.reduce((total, record) => {
+      if (record.isCaptain) {
+        return total + (record.performancePoints * 2);
+      } else if (record.isViceCaptain) {
+        return total + (record.performancePoints * 1.5);
+      } else {
+        return total + record.performancePoints;
+      }
+    }, 0);
+  }
+
+  async getLeaderboard(): Promise<any[]> {
+    const teams = await this.getAllTeams();
+    const leaderboardEntries = [];
+
+    for (const team of teams) {
+      const totalPoints = await this.calculateTeamPoints(team.id);
+      const user = await this.getUser(team.userId);
+
+      leaderboardEntries.push({
+        teamId: team.id,
+        teamName: team.name,
+        userName: user?.name,
+        totalPoints
+      });
+    }
+
+    return leaderboardEntries.sort((a, b) => b.totalPoints - a.totalPoints);
+  }
+
+  async getTeamRank(teamId: number): Promise<number> {
+    const leaderboard = await this.getLeaderboard();
+    const index = leaderboard.findIndex(entry => entry.teamId === teamId);
+    return index !== -1 ? index + 1 : leaderboard.length + 1;
+  }
+
+  async getPlayerSelectionStats(): Promise<{ playerId: number, count: number, percentage: number }[]> {
+    // Get all players and teams
+    const allPlayers = await this.getAllPlayers();
+    const allTeamsData = await this.getTeamsWithPlayers();
+
+    if (allTeamsData.length === 0) {
+      // If there are no teams, return 0% for all players
+      return allPlayers.map(player => ({
+        playerId: player.id,
+        count: 0,
+        percentage: 0
+      }));
+    }
+
+    // Calculate selection count for each player
+    const playerSelectionCount: Record<number, number> = {};
+
+    // Initialize counters for all players
+    allPlayers.forEach(player => {
+      playerSelectionCount[player.id] = 0;
+    });
+
+    // Count selections
+    allTeamsData.forEach(teamData => {
+      teamData.players.forEach((player: any) => {
+        if (playerSelectionCount[player.id] !== undefined) {
+          playerSelectionCount[player.id]++;
+        }
+      });
+    });
+
+    // Calculate percentages
+    const totalTeams = allTeamsData.length;
+
+    return Object.entries(playerSelectionCount).map(([playerId, count]) => ({
+      playerId: parseInt(playerId),
+      count,
+      percentage: Math.round((count / totalTeams) * 100)
+    }));
   }
 }
+
 export const storage = new DatabaseStorage();
