@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth } from "./auth";
+import { setupAuth, hashPassword } from "./auth";
 import { db } from "./db";
 import { updatePlayerPointsSchema, createTeamWithPlayersSchema } from "@shared/schema";
 import { z } from "zod";
@@ -119,7 +119,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid team data", errors: result.error.format() });
       }
       
-      const { teamName, playerIds } = result.data;
+      const { teamName, playerIds, captainId, viceCaptainId, totalCredits } = result.data;
+      
+      // Check if team exceeds 1000 points/credits limit
+      if (totalCredits > 1000) {
+        return res.status(400).json({ message: "Team exceeds the 1000 points credit limit" });
+      }
+      
+      // Validate captain and vice-captain
+      if (!playerIds.includes(captainId)) {
+        return res.status(400).json({ message: "Captain must be a selected player" });
+      }
+      
+      if (!playerIds.includes(viceCaptainId)) {
+        return res.status(400).json({ message: "Vice-Captain must be a selected player" });
+      }
+      
+      if (captainId === viceCaptainId) {
+        return res.status(400).json({ message: "Captain and Vice-Captain cannot be the same player" });
+      }
       
       // Create the team
       const team = await storage.createTeam({
@@ -131,7 +149,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const playerId of playerIds) {
         await storage.addPlayerToTeam({
           teamId: team.id,
-          playerId
+          playerId,
+          isCaptain: playerId === captainId,
+          isViceCaptain: playerId === viceCaptainId
         });
       }
       
@@ -235,6 +255,19 @@ async function initializeDatabase() {
         status: "live",
         createdAt: new Date()
       });
+      
+      // Create admin user with fixed credentials
+      const adminExists = await storage.getUserByUsername("admin");
+      if (!adminExists) {
+        await storage.createUser({
+          username: "admin",
+          password: await hashPassword("ritik123"), // Using the hashPassword function from auth.ts
+          name: "Admin",
+          email: "admin@cr13k3t.com",
+          isAdmin: true
+        });
+        console.log("Admin user created");
+      }
       
       console.log("Database initialized with default data");
     }

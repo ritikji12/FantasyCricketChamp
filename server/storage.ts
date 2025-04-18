@@ -216,7 +216,16 @@ export class DatabaseStorage implements IStorage {
   // Rankings and stats
   async calculateTeamPoints(teamId: number): Promise<number> {
     const teamPlayers = await this.getTeamPlayers(teamId);
-    return teamPlayers.reduce((total, player) => total + player.points, 0);
+    return teamPlayers.reduce((total, player) => {
+      // Apply 2x multiplier for captain, 1.5x for vice-captain
+      if (player.isCaptain) {
+        return total + (player.points * 2);
+      } else if (player.isViceCaptain) {
+        return total + (player.points * 1.5);
+      } else {
+        return total + player.points;
+      }
+    }, 0);
   }
   
   async getLeaderboard(): Promise<any[]> {
