@@ -120,7 +120,10 @@ export class DatabaseStorage implements IStorage {
   async updatePlayerPoints(playerData: UpdatePlayerPoints): Promise<Player> {
     const { id, runs, wickets, points } = playerData;
 
-    const updatedValues: any = { performancePoints: points };
+    const updatedValues: any = { 
+      credit_points: points,
+      performance_points: points 
+    };
     if (runs !== undefined) updatedValues.runs = runs;
     if (wickets !== undefined) updatedValues.wickets = wickets;
 

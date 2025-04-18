@@ -1,4 +1,3 @@
-
 -- Switch to public schema
 SET search_path TO public;
 
@@ -19,7 +18,7 @@ CREATE TABLE player_categories (
     name TEXT NOT NULL UNIQUE
 );
 
--- Create players table
+-- Create players table with both credit and performance points
 CREATE TABLE players (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
@@ -58,14 +57,6 @@ CREATE TABLE matches (
 );
 
 -- Insert existing data
-INSERT INTO users (id, username, password, name, email, is_admin, created_at) VALUES
-(1, 'ritikji', 'cc1cec35f9a7c014b47a9ffb0c4ad16f08b4eb48d0f33e8ad1b6266c8c6497b52f5b3123fdee9f8d49a67a6822f84b0caf2d8db854767ef515a83809e434b674.0b761cd4852a59e5c8e36dba7f8b5e2a', 'Ritik', 'r1@gmail.com', false, '2025-04-18 03:42:40.202427'),
-(2, 'admin', 'b2ee95fa7d9ea498eeb8866dfade06e1f943feb1d04f27d32104acd8a082de5e912c2a7f162eb6b5b6f447f4d172babcfa026e5486add1020b56305125fd0373.2649ea22a0bc56ebd3fb5cac72fd856b', 'Admin User', 'admin@cr13k3t.com', true, '2025-04-18 03:59:49.444'),
-(3, '123', '9b721b2fa1b5d1c30562863ba36fba036dcc3fe84aae4eb0b9aea8dea578570110de994773670047589c5266cf5a03513bd73642e7bf52d52f969a7e10135fc1.3d52c3406a479ee6dd3da670d68c9c5b', '12', '1@gmail.com', false, '2025-04-18 04:06:38.241487'),
-(4, 'Ritikji', '267f5e04e490d0beaed7e9851502411b9eabe8ec59dde3380b9fab1ed6de6f85371b391119afc646299c6749e98e81b0e2c52f42363ca888518e2870480f45e9.158113817b9f0e15abd74386fc923341', 'Ritik', 'r12@gmail.com', false, '2025-04-18 04:26:40.657741'),
-(5, 'dhankhar18_45_07', '2829dece819cc803a596f3ff7ccbf5d5657f0936ece2f23b9678b0fd0106f21d2929181f8167ae8443a294a22260951947f1a444d346530a0947fa62832996bf.a082387d8a4513dc4ee3b647f1f8f89e', 'mayank dhankhar', 'dhankharmanju299@gmail.com', false, '2025-04-18 04:29:44.762958'),
-(6, 'Sahil', 'd071339d03c0c77034b27a732adff20e8c3d62eb3917896db38685cb69f20e97e2f40ad4a22f0614942d6e4914ca4e5f6a900d9ea9fd733377fcce2fe7b58d5e.a2048be09202701795b0f52e5c945cd3', 'Sahil', 'sahil221201singh@gmail.com', false, '2025-04-18 04:31:37.088181');
-
 INSERT INTO player_categories (id, name) VALUES
 (1, 'All Rounder'),
 (2, 'Batsman'),
@@ -91,6 +82,14 @@ INSERT INTO players (id, name, category_id, credit_points, performance_points, r
 (16, 'Karambeer', 3, 95, 95, 5, 2),
 (17, 'Manga', 3, 90, 90, 10, 2),
 (18, 'None', 4, 0, 0, 0, 0);
+
+INSERT INTO users (id, username, password, name, email, is_admin, created_at) VALUES
+(1, 'ritikji', 'cc1cec35f9a7c014b47a9ffb0c4ad16f08b4eb48d0f33e8ad1b6266c8c6497b52f5b3123fdee9f8d49a67a6822f84b0caf2d8db854767ef515a83809e434b674.0b761cd4852a59e5c8e36dba7f8b5e2a', 'Ritik', 'r1@gmail.com', false, '2025-04-18 03:42:40.202427'),
+(2, 'admin', 'b2ee95fa7d9ea498eeb8866dfade06e1f943feb1d04f27d32104acd8a082de5e912c2a7f162eb6b5b6f447f4d172babcfa026e5486add1020b56305125fd0373.2649ea22a0bc56ebd3fb5cac72fd856b', 'Admin User', 'admin@cr13k3t.com', true, '2025-04-18 03:59:49.444'),
+(3, '123', '9b721b2fa1b5d1c30562863ba36fba036dcc3fe84aae4eb0b9aea8dea578570110de994773670047589c5266cf5a03513bd73642e7bf52d52f969a7e10135fc1.3d52c3406a479ee6dd3da670d68c9c5b', '12', '1@gmail.com', false, '2025-04-18 04:06:38.241487'),
+(4, 'Ritikji', '267f5e04e490d0beaed7e9851502411b9eabe8ec59dde3380b9fab1ed6de6f85371b391119afc646299c6749e98e81b0e2c52f42363ca888518e2870480f45e9.158113817b9f0e15abd74386fc923341', 'Ritik', 'r12@gmail.com', false, '2025-04-18 04:26:40.657741'),
+(5, 'dhankhar18_45_07', '2829dece819cc803a596f3ff7ccbf5d5657f0936ece2f23b9678b0fd0106f21d2929181f8167ae8443a294a22260951947f1a444d346530a0947fa62832996bf.a082387d8a4513dc4ee3b647f1f8f89e', 'mayank dhankhar', 'dhankharmanju299@gmail.com', false, '2025-04-18 04:29:44.762958'),
+(6, 'Sahil', 'd071339d03c0c77034b27a732adff20e8c3d62eb3917896db38685cb69f20e97e2f40ad4a22f0614942d6e4914ca4e5f6a900d9ea9fd733377fcce2fe7b58d5e.a2048be09202701795b0f52e5c945cd3', 'Sahil', 'sahil221201singh@gmail.com', false, '2025-04-18 04:31:37.088181');
 
 INSERT INTO teams (id, name, user_id, created_at) VALUES
 (1, 'ritik', 1, '2025-04-18 03:43:33.053733'),
