@@ -1,83 +1,70 @@
-**1. Entry Point (`src/index.ts`)**  
-```ts
-import express from 'express';
-import { createServer } from 'http';
-import { registerRoutes } from './routes';
+import express, { type Request, Response, NextFunction } from "express";
+import { registerRoutes } from "./routes";
+import { setupVite, serveStatic, log } from "./vite";
 
-async function main() {
-  const app = express();
-  app.use(express.json());
+const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
-  // Register all API routes
-  const httpServer = await registerRoutes(app);
+app.use((req, res, next) => {
+  const start = Date.now();
+  const path = req.path;
+  let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
-  // Listen on the port provided by Render (or 4000 as fallback)
-  const port = process.env.PORT ? parseInt(process.env.PORT) : 4000;
-  httpServer.listen(port, () => {
-    console.log(`🚀 Server listening on port ${port}`);
+  const originalResJson = res.json;
+  res.json = function (bodyJson, ...args) {
+    capturedJsonResponse = bodyJson;
+    return originalResJson.apply(res, [bodyJson, ...args]);
+  };
+
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    if (path.startsWith("/api")) {
+      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+      if (capturedJsonResponse) {
+        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      }
+
+      if (logLine.length > 80) {
+        logLine = logLine.slice(0, 79) + "…";
+      }
+
+      log(logLine);
+    }
   });
-}
 
-main().catch(err => {
-  console.error("❌ Failed to start server", err);
-  process.exit(1);
+  next();
 });
-```  
 
-**2. Your Routes File (`src/route.ts`)**  
-(Keep exactly as you have it, exporting `registerRoutes(app)`.)  
+(async () => {
+  const server = await registerRoutes(app);
 
-**3. `package.json` Scripts**  
-Make sure your `package.json` includes build & start commands that Render can use:  
-```json
-{
-  "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js"
+  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    const status = err.status || err.statusCode || 500;
+    const message = err.message || "Internal Server Error";
+
+    res.status(status).json({ message });
+    throw err;
+  });
+
+  // importantly only setup vite in development and after
+  // setting up all the other routes so the catch-all route
+  // doesn't interfere with the other routes
+  if (app.get("env") === "development") {
+    await setupVite(app, server);
+  } else {
+    serveStatic(app);
   }
-}
-```  
-- **Build Command** on Render: `npm run build`  
-- **Start Command** on Render: `npm run start`  
 
-**4. TypeScript Configuration (`tsconfig.json`)**  
-Ensure your compiled output lands in `dist/`:  
-```json
-{
-  "compilerOptions": {
-    "outDir": "dist",
-    "rootDir": "src",
-    "module": "ESNext",
-    "target": "ES2019",
-    "moduleResolution": "Node",
-    "esModuleInterop": true,
-    "resolveJsonModule": true,
-    "skipLibCheck": true
-  },
-  "include": ["src"]
-}
-```  
-
----
-
-With this setup:  
-1. Render will run `npm run build` → compiles TS into `dist/`.  
-2. Then it will run `npm run start` → executes `dist/index.js`, which imports your `route.ts` code, mounts all `/api/...` endpoints, and listens on `process.env.PORT`.  
-
-No local server calls are necessary—Render will host everything for you.  
-
-**Project Directory Structure**  
-```
-/ (repo root)
-├── package.json
-├── tsconfig.json
-├── src/
-│   ├── index.ts        # the entry point above
-│   ├── route.ts        # your single routes file
-│   ├── storage.ts      # your DatabaseStorage
-│   ├── auth.ts         # auth setup
-│   ├── db.ts           # drizzle/db pool
-│   └── shared/
-│       └── schema.ts   # your Zod & Drizzle schemas
-```
-
+  // ALWAYS serve the app on port 5000
+  // this serves both the API and the client.
+  // It is the only port that is not firewalled.
+  const port = 5000;
+  server.listen({
+    port,
+    host: "0.0.0.0",
+    reusePort: true,
+  }, () => {
+    log(`serving on port ${port}`);
+  });
+})();
