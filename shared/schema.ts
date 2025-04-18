@@ -146,6 +146,30 @@ export type TeamRanking = z.infer<typeof teamRankingSchema>;
 export type Contest = typeof contests.$inferSelect;
 export type InsertContest = z.infer<typeof insertContestSchema>;
 
+// Contests Table
+export const contests = pgTable("contests", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  rules: text("rules").notNull(),
+  prizePool: integer("prize_pool").notNull(),
+  entryFee: integer("entry_fee").notNull(),
+  maxEntries: integer("max_entries").notNull(),
+  isLive: boolean("is_live").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull()
+});
+
+export const insertContestSchema = createInsertSchema(contests).pick({
+  name: true,
+  description: true,
+  rules: true,
+  prizePool: true,
+  entryFee: true,
+  maxEntries: true,
+  isLive: true
+});
+
 // Schema for updating player points
 export const updatePlayerPointsSchema = z.object({
   points: z.number()
