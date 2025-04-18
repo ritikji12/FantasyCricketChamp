@@ -54,7 +54,7 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  sessionStore: any; // Express session store
+  sessionStore: any;
 
   constructor() {
     this.sessionStore = new MemoryStore({
@@ -100,35 +100,11 @@ export class DatabaseStorage implements IStorage {
 
   // Players
   async getPlayersByCategory(categoryId: number): Promise<Player[]> {
-    return db.select({
-      id: players.id,
-      name: players.name,
-      categoryId: players.categoryId,
-      selectionPoints: players.selectionPoints,
-      creditPoints: players.creditPoints,
-      performancePoints: players.performancePoints,
-      runs: players.runs,
-      wickets: players.wickets
-    }).from(players).where(eq(players.categoryId, categoryId));
+    return db.select().from(players).where(eq(players.categoryId, categoryId));
   }
 
   async getAllPlayers(): Promise<Player[]> {
-    return db.select({
-      id: players.id,
-      name: players.name,
-      categoryId: players.categoryId,
-      selectionPoints: players.selectionPoints,
-      creditPoints: players.creditPoints,
-      performancePoints: players.performancePoints,
-      runs: players.runs,
-      wickets: players.wickets
-    }).from(players);
-  }
-
-  async updateMatchStatus(matchId: number, status: string): Promise<void> {
-    await db.update(matches)
-      .set({ status })
-      .where(eq(matches.id, matchId));
+    return db.select().from(players);
   }
 
   async getPlayer(id: number): Promise<Player | undefined> {
@@ -142,32 +118,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updatePlayerPoints(playerData: UpdatePlayerPoints): Promise<Player> {
-    const { id, runs, wickets, points } = playerData;
-
-    const updatedValues: any = { 
-      credit_points: points,
-      performance_points: points 
-    };
-    if (runs !== undefined) updatedValues.runs = runs;
-    if (wickets !== undefined) updatedValues.wickets = wickets;
-
-    const [updatedPlayer] = await db
-      .update(players)
-      .set(updatedValues)
-      .where(eq(players.id, id))
+    const [updatedPlayer] = await db.update(players)
+      .set({
+        runs: playerData.runs,
+        wickets: playerData.wickets,
+        selectionPoints: playerData.points,
+      })
+      .where(eq(players.id, playerData.id))
       .returning();
-
     return updatedPlayer;
-  }
-
-  async addPlayerToTeam(teamPlayer: InsertTeamPlayer): Promise<void> {
-    const player = await this.getPlayer(teamPlayer.playerId);
-    if (!player) throw new Error("Player not found");
-
-    await db.insert(teamPlayers).values({
-      ...teamPlayer,
-      creditPointsAtSelection: player.creditPoints
-    });
   }
 
   // Teams
@@ -191,22 +150,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTeamPlayers(teamId: number): Promise<(Player & { isCaptain?: boolean, isViceCaptain?: boolean })[]> {
-    const result = await db
-      .select({
-        id: players.id,
-        name: players.name,
-        categoryId: players.categoryId,
-        points: players.creditPoints,
-        runs: players.runs,
-        wickets: players.wickets,
-        isCaptain: teamPlayers.isCaptain,
-        isViceCaptain: teamPlayers.isViceCaptain
-      })
-      .from(teamPlayers)
-      .innerJoin(players, eq(teamPlayers.playerId, players.id))
+    return db.select({
+      ...players,
+      isCaptain: teamPlayers.isCaptain,
+      isViceCaptain: teamPlayers.isViceCaptain,
+    }).from(players)
+      .leftJoin(teamPlayers, eq(players.id, teamPlayers.playerId))
       .where(eq(teamPlayers.teamId, teamId));
-
-    return result;
   }
 
   async getAllTeams(): Promise<Team[]> {
@@ -214,33 +164,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTeamsWithPlayers(): Promise<any[]> {
-    const allTeams = await this.getAllTeams();
-    const result = [];
-
-    for (const team of allTeams) {
-      const user = await this.getUser(team.userId);
-      const teamPlayers = await this.getTeamPlayers(team.id);
-      const totalPoints = await this.calculateTeamPoints(team.id);
-      const rank = await this.getTeamRank(team.id);
-
-      result.push({
-        team,
-        user,
-        players: teamPlayers,
-        totalPoints,
-        rank,
-        playerCount: teamPlayers.length
-      });
-    }
-
-    return result.sort((a, b) => a.rank - b.rank);
+    return db.select().from(teams).leftJoin(teamPlayers, eq(teams.id, teamPlayers.teamId));
   }
 
   async deleteTeam(teamId: number): Promise<void> {
-    // First delete team players (foreign key constraint)
-    await db.delete(teamPlayers).where(eq(teamPlayers.teamId, teamId));
-    // Then delete the team
-    await db.delete(teams).where(eq(teams.id, teamId));
+    await db.delete().from(teams).where(eq(teams.id, teamId));
   }
 
   // Matches
@@ -250,7 +178,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCurrentMatch(): Promise<Match | undefined> {
-    const [match] = await db.select().from(matches).where(eq(matches.status, 'live'));
+    const [match] = await db.select().from(matches).where(eq(matches.status, "live"));
     return match;
   }
 
@@ -261,93 +189,39 @@ export class DatabaseStorage implements IStorage {
 
   // Rankings and stats
   async calculateTeamPoints(teamId: number): Promise<number> {
-    const result = await db
-      .select({
-        playerId: players.id,
-        performancePoints: players.performancePoints,
-        isCaptain: teamPlayers.isCaptain,
-        isViceCaptain: teamPlayers.isViceCaptain,
-      })
-      .from(teamPlayers)
-      .innerJoin(players, eq(teamPlayers.playerId, players.id))
-      .where(eq(teamPlayers.teamId, teamId));
-
-    return result.reduce((total, record) => {
-      if (record.isCaptain) {
-        return total + (record.performancePoints * 2);
-      } else if (record.isViceCaptain) {
-        return total + (record.performancePoints * 1.5);
-      } else {
-        return total + record.performancePoints;
-      }
+    const players = await this.getTeamPlayers(teamId);
+    return players.reduce((totalPoints, player) => {
+      return totalPoints + player.selectionPoints;
     }, 0);
   }
 
   async getLeaderboard(): Promise<any[]> {
-    const teams = await this.getAllTeams();
-    const leaderboardEntries = [];
-
-    for (const team of teams) {
-      const totalPoints = await this.calculateTeamPoints(team.id);
-      const user = await this.getUser(team.userId);
-
-      leaderboardEntries.push({
-        teamId: team.id,
-        teamName: team.name,
-        userName: user?.name,
-        totalPoints
-      });
-    }
-
-    return leaderboardEntries.sort((a, b) => b.totalPoints - a.totalPoints);
+    const teamsWithPoints = await db.select({
+      teamId: teams.id,
+      teamName: teams.name,
+      points: sql`${this.calculateTeamPoints(teams.id)}`,
+    }).from(teams);
+    return teamsWithPoints.sort((a, b) => b.points - a.points);
   }
 
   async getTeamRank(teamId: number): Promise<number> {
     const leaderboard = await this.getLeaderboard();
-    const index = leaderboard.findIndex(entry => entry.teamId === teamId);
-    return index !== -1 ? index + 1 : leaderboard.length + 1;
+    return leaderboard.findIndex(team => team.teamId === teamId) + 1;
   }
 
   async getPlayerSelectionStats(): Promise<{ playerId: number, count: number, percentage: number }[]> {
-    // Get all players and teams
-    const allPlayers = await this.getAllPlayers();
-    const allTeamsData = await this.getTeamsWithPlayers();
+    const playerStats = await db.select({
+      playerId: teamPlayers.playerId,
+      count: sql`COUNT(*)`,
+    }).from(teamPlayers)
+      .groupBy(teamPlayers.playerId);
 
-    if (allTeamsData.length === 0) {
-      // If there are no teams, return 0% for all players
-      return allPlayers.map(player => ({
-        playerId: player.id,
-        count: 0,
-        percentage: 0
-      }));
-    }
+    const totalTeams = await db.count().from(teams);
 
-    // Calculate selection count for each player
-    const playerSelectionCount: Record<number, number> = {};
-
-    // Initialize counters for all players
-    allPlayers.forEach(player => {
-      playerSelectionCount[player.id] = 0;
-    });
-
-    // Count selections
-    allTeamsData.forEach(teamData => {
-      teamData.players.forEach((player: any) => {
-        if (playerSelectionCount[player.id] !== undefined) {
-          playerSelectionCount[player.id]++;
-        }
-      });
-    });
-
-    // Calculate percentages
-    const totalTeams = allTeamsData.length;
-
-    return Object.entries(playerSelectionCount).map(([playerId, count]) => ({
-      playerId: parseInt(playerId),
-      count,
-      percentage: Math.round((count / totalTeams) * 100)
+    return playerStats.map(stat => ({
+      playerId: stat.playerId,
+      count: stat.count,
+      percentage: (stat.count / totalTeams) * 100,
     }));
   }
 }
-
-export const storage = new DatabaseStorage();
