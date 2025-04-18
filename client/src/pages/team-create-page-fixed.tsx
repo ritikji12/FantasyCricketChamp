@@ -320,6 +320,27 @@ export default function TeamCreatePage() {
                 </ul>
               </div>
               
+              <div className="bg-gray-50 p-3 mb-4 rounded-md">
+                <p className="text-gray-700 font-medium mb-2">Player Selection Stats:</p>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 rounded-full bg-[#10B981] mr-1"></div>
+                    <span className="text-xs text-gray-600">Low (&lt;40%)</span>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 rounded-full bg-[#FFBA08] mr-1"></div>
+                    <span className="text-xs text-gray-600">Medium (40-70%)</span>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 rounded-full bg-[#FF0066] mr-1"></div>
+                    <span className="text-xs text-gray-600">High (&gt;70%)</span>
+                  </div>
+                  <div className="ml-auto">
+                    <span className="text-xs text-gray-500 italic">% of teams that selected this player</span>
+                  </div>
+                </div>
+              </div>
+              
               <div className="mb-4">
                 <Label htmlFor="team-name" className="block text-gray-700 mb-2 font-medium">Team Name</Label>
                 <Input 
@@ -347,7 +368,14 @@ export default function TeamCreatePage() {
                       {playersByCategory["All Rounder"].map(player => (
                         <div key={player.id} className="relative">
                           <PlayerCard
-                            player={player}
+                            player={{
+                              id: player.id,
+                              name: player.name,
+                              points: player.points,
+                              runs: player.runs || undefined,
+                              wickets: player.wickets || undefined,
+                              selectionPercentage: (player as any).selectionPercentage
+                            }}
                             category="All Rounder"
                             isSelected={selectedPlayers.includes(player.id)}
                             onToggle={() => handlePlayerToggle(player.id)}
@@ -401,7 +429,14 @@ export default function TeamCreatePage() {
                       {playersByCategory["Batsman"].map(player => (
                         <div key={player.id} className="relative">
                           <PlayerCard
-                            player={player}
+                            player={{
+                              id: player.id,
+                              name: player.name,
+                              points: player.points,
+                              runs: player.runs || undefined,
+                              wickets: player.wickets || undefined,
+                              selectionPercentage: (player as any).selectionPercentage
+                            }}
                             category="Batsman"
                             isSelected={selectedPlayers.includes(player.id)}
                             onToggle={() => handlePlayerToggle(player.id)}
@@ -455,7 +490,14 @@ export default function TeamCreatePage() {
                       {playersByCategory["Bowler"].map(player => (
                         <div key={player.id} className="relative">
                           <PlayerCard
-                            player={player}
+                            player={{
+                              id: player.id,
+                              name: player.name,
+                              points: player.points,
+                              runs: player.runs || undefined,
+                              wickets: player.wickets || undefined,
+                              selectionPercentage: (player as any).selectionPercentage
+                            }}
                             category="Bowler"
                             isSelected={selectedPlayers.includes(player.id)}
                             onToggle={() => handlePlayerToggle(player.id)}
