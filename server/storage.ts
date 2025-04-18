@@ -33,7 +33,7 @@ export interface IStorage {
   getTeam(id: number): Promise<Team | undefined>;
   createTeam(team: InsertTeam): Promise<Team>;
   addPlayerToTeam(teamPlayer: InsertTeamPlayer): Promise<void>;
-  getTeamPlayers(teamId: number): Promise<Player[]>;
+  getTeamPlayers(teamId: number): Promise<(Player & { isCaptain?: boolean, isViceCaptain?: boolean })[]>;
   getAllTeams(): Promise<Team[]>;
   getTeamsWithPlayers(): Promise<any[]>;
   
@@ -48,11 +48,11 @@ export interface IStorage {
   getTeamRank(teamId: number): Promise<number>;
   
   // Session
-  sessionStore: session.SessionStore;
+  sessionStore: any; // Express session store
 }
 
 export class DatabaseStorage implements IStorage {
-  sessionStore: session.SessionStore;
+  sessionStore: any; // Express session store
   
   constructor() {
     this.sessionStore = new MemoryStore({

@@ -9,7 +9,15 @@ import { User, InsertUser } from "@shared/schema";
 
 declare global {
   namespace Express {
-    interface User extends User {}
+    interface User {
+      id: number;
+      username: string;
+      password: string;
+      name: string;
+      email: string;
+      isAdmin: boolean;
+      createdAt: Date;
+    }
   }
 }
 
@@ -102,7 +110,7 @@ export function setupAuth(app: Express) {
       // Remove password from response
       const { password, ...userWithoutPassword } = user;
 
-      req.login(user, (err) => {
+      req.login(user, (err: Error | null) => {
         if (err) return next(err);
         res.status(201).json(userWithoutPassword);
       });
@@ -112,13 +120,13 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err, user, info) => {
+    passport.authenticate("local", (err: any, user: Express.User | false, info: { message?: string } | undefined) => {
       if (err) return next(err);
       if (!user) {
         return res.status(401).json({ message: info?.message || "Authentication failed" });
       }
       
-      req.login(user, (err) => {
+      req.login(user, (err: Error | null) => {
         if (err) return next(err);
         
         // Remove password from response
@@ -129,7 +137,7 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/logout", (req, res, next) => {
-    req.logout((err) => {
+    req.logout((err: Error | null) => {
       if (err) return next(err);
       res.sendStatus(200);
     });
