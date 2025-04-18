@@ -5,19 +5,17 @@ import { useLocation } from 'wouter';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
 import MatchBanner from '@/components/match-banner';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { Loader2, Crown, Award, AlertCircle } from 'lucide-react';
+import { Loader2, Crown, Award } from 'lucide-react';
 import PlayerCard from '@/components/player-card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Player, PlayerCategory } from '@shared/schema';
 
 export default function TeamCreatePage() {
   const { user } = useAuth();
@@ -56,20 +54,20 @@ export default function TeamCreatePage() {
   }, [userTeam, navigate, toast]);
   
   // Fetch player categories
-  const { data: categories = [], isLoading: isLoadingCategories } = useQuery({
+  const { data: categories = [], isLoading: isLoadingCategories } = useQuery<PlayerCategory[]>({
     queryKey: ['/api/players/categories'],
     enabled: Boolean(user && !userTeam),
   });
   
   // Fetch all players
-  const { data: players = [], isLoading: isLoadingPlayers } = useQuery({
+  const { data: players = [], isLoading: isLoadingPlayers } = useQuery<Player[]>({
     queryKey: ['/api/players'],
     enabled: Boolean(user && !userTeam),
   });
   
   // Group players by category
   const playersByCategory = React.useMemo(() => {
-    const grouped: Record<string, typeof players> = {};
+    const grouped: Record<string, Player[]> = {};
     
     categories.forEach(cat => {
       grouped[cat.name] = players.filter(player => player.categoryId === cat.id);
@@ -95,7 +93,7 @@ export default function TeamCreatePage() {
   
   // Get selected player objects
   const selectedPlayerObjects = React.useMemo(() => {
-    return selectedPlayers.map(id => players.find(p => p.id === id)).filter(Boolean);
+    return selectedPlayers.map(id => players.find(p => p.id === id)).filter(Boolean) as Player[];
   }, [selectedPlayers, players]);
   
   // Functions to handle captain and vice-captain selection
@@ -153,8 +151,6 @@ export default function TeamCreatePage() {
       if (prev.includes(playerId)) {
         // Remove player from selection
         const newSelection = prev.filter(id => id !== playerId);
-        
-        // We will handle captain and vice-captain updates separately
         return newSelection;
       } else {
         // Check if adding would exceed 1000 credits
@@ -347,7 +343,7 @@ export default function TeamCreatePage() {
                             <div className="mt-2 flex justify-center space-x-2">
                               <button
                                 type="button"
-                                onClick={() => setCaptainId(player.id)}
+                                onClick={() => handleCaptainSelect(player.id)}
                                 className={`flex items-center px-2 py-1 rounded-md text-xs ${
                                   captainId === player.id 
                                     ? 'bg-yellow-500 text-white'
@@ -359,7 +355,7 @@ export default function TeamCreatePage() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => setViceCaptainId(player.id)}
+                                onClick={() => handleViceCaptainSelect(player.id)}
                                 className={`flex items-center px-2 py-1 rounded-md text-xs ${
                                   viceCaptainId === player.id 
                                     ? 'bg-blue-500 text-white'
@@ -401,7 +397,7 @@ export default function TeamCreatePage() {
                             <div className="mt-2 flex justify-center space-x-2">
                               <button
                                 type="button"
-                                onClick={() => setCaptainId(player.id)}
+                                onClick={() => handleCaptainSelect(player.id)}
                                 className={`flex items-center px-2 py-1 rounded-md text-xs ${
                                   captainId === player.id 
                                     ? 'bg-yellow-500 text-white'
@@ -413,7 +409,7 @@ export default function TeamCreatePage() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => setViceCaptainId(player.id)}
+                                onClick={() => handleViceCaptainSelect(player.id)}
                                 className={`flex items-center px-2 py-1 rounded-md text-xs ${
                                   viceCaptainId === player.id 
                                     ? 'bg-blue-500 text-white'
@@ -455,7 +451,7 @@ export default function TeamCreatePage() {
                             <div className="mt-2 flex justify-center space-x-2">
                               <button
                                 type="button"
-                                onClick={() => setCaptainId(player.id)}
+                                onClick={() => handleCaptainSelect(player.id)}
                                 className={`flex items-center px-2 py-1 rounded-md text-xs ${
                                   captainId === player.id 
                                     ? 'bg-yellow-500 text-white'
@@ -467,7 +463,7 @@ export default function TeamCreatePage() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => setViceCaptainId(player.id)}
+                                onClick={() => handleViceCaptainSelect(player.id)}
                                 className={`flex items-center px-2 py-1 rounded-md text-xs ${
                                   viceCaptainId === player.id 
                                     ? 'bg-blue-500 text-white'

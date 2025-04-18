@@ -9,7 +9,7 @@ import NotFound from "@/pages/not-found";
 import HomePage from "@/pages/home-page";
 import AuthPage from "@/pages/auth-page";
 import AdminPage from "@/pages/admin-page";
-import TeamCreatePage from "@/pages/team-create-page";
+import TeamCreatePage from "@/pages/team-create-page-fixed";
 import TeamViewPage from "@/pages/team-view-page";
 
 function Router() {
