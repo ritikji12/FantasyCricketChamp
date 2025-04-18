@@ -41,6 +41,8 @@ export const teams = pgTable("teams", {
 export const teamPlayers = pgTable("team_players", {
   teamId: integer("team_id").notNull().references(() => teams.id),
   playerId: integer("player_id").notNull().references(() => players.id),
+  isCaptain: boolean("is_captain").default(false).notNull(),
+  isViceCaptain: boolean("is_vice_captain").default(false).notNull(),
 }, (t) => ({
   pk: primaryKey({ columns: [t.teamId, t.playerId] }),
 }));
@@ -83,6 +85,8 @@ export const insertTeamSchema = createInsertSchema(teams).pick({
 export const insertTeamPlayerSchema = createInsertSchema(teamPlayers).pick({
   teamId: true,
   playerId: true,
+  isCaptain: true,
+  isViceCaptain: true,
 });
 
 export const insertMatchSchema = createInsertSchema(matches).pick({
@@ -102,7 +106,10 @@ export const updatePlayerPointsSchema = z.object({
 export const createTeamWithPlayersSchema = z.object({
   teamName: z.string().min(3, "Team name must be at least 3 characters"),
   playerIds: z.array(z.number()),
+  captainId: z.number(),
+  viceCaptainId: z.number(),
   wicketkeeper: z.literal("None"),
+  totalCredits: z.number().max(1000, "Total credits cannot exceed 1000 points"),
 });
 
 export const loginSchema = z.object({

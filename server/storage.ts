@@ -151,7 +151,7 @@ export class DatabaseStorage implements IStorage {
     await db.insert(teamPlayers).values(teamPlayer);
   }
   
-  async getTeamPlayers(teamId: number): Promise<Player[]> {
+  async getTeamPlayers(teamId: number): Promise<(Player & { isCaptain?: boolean, isViceCaptain?: boolean })[]> {
     const result = await db
       .select({
         id: players.id,
@@ -159,7 +159,9 @@ export class DatabaseStorage implements IStorage {
         categoryId: players.categoryId,
         points: players.points,
         runs: players.runs,
-        wickets: players.wickets
+        wickets: players.wickets,
+        isCaptain: teamPlayers.isCaptain,
+        isViceCaptain: teamPlayers.isViceCaptain
       })
       .from(teamPlayers)
       .innerJoin(players, eq(teamPlayers.playerId, players.id))
