@@ -42,7 +42,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Error fetching current match" });
     }
   });
-  
+
+  // Create a new match (admin only)
+  app.post("/api/matches", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { team1, team2 } = req.body;
+      
+      if (!team1 || !team2) {
+        return res.status(400).json({ message: "Both teams are required" });
+      }
+
+      const [match] = await db.insert(matches).values({
+        team1,
+        team2,
+        status: 'live'
+      }).returning();
+
+      res.status(201).json(match);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create match" });
+    }
+  });
+
   // Player routes
   app.get("/api/players", async (req, res) => {
     try {
