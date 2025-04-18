@@ -47,6 +47,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/players", async (req, res) => {
     try {
       const categoryId = req.query.categoryId ? parseInt(req.query.categoryId as string) : undefined;
+      const includeStats = req.query.stats === 'true';
       
       let players;
       if (categoryId) {
@@ -55,7 +56,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         players = await storage.getAllPlayers();
       }
       
-      res.json(players);
+      // Add selection percentage statistics if requested
+      if (includeStats) {
+        const stats = await storage.getPlayerSelectionStats();
+        const playersWithStats = players.map(player => {
+          const playerStat = stats.find(stat => stat.playerId === player.id);
+          return {
+            ...player,
+            selectionPercentage: playerStat ? playerStat.percentage : 0
+          };
+        });
+        res.json(playersWithStats);
+      } else {
+        res.json(players);
+      }
     } catch (error) {
       console.error("Error fetching players:", error);
       res.status(500).json({ message: "Error fetching players" });

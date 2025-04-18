@@ -46,6 +46,7 @@ export interface IStorage {
   calculateTeamPoints(teamId: number): Promise<number>;
   getLeaderboard(): Promise<any[]>;
   getTeamRank(teamId: number): Promise<number>;
+  getPlayerSelectionStats(): Promise<{ playerId: number, count: number, percentage: number }[]>;
   
   // Session
   sessionStore: any; // Express session store
@@ -251,6 +252,47 @@ export class DatabaseStorage implements IStorage {
     const leaderboard = await this.getLeaderboard();
     const index = leaderboard.findIndex(entry => entry.teamId === teamId);
     return index !== -1 ? index + 1 : leaderboard.length + 1;
+  }
+  
+  async getPlayerSelectionStats(): Promise<{ playerId: number, count: number, percentage: number }[]> {
+    // Get all players and teams
+    const allPlayers = await this.getAllPlayers();
+    const allTeamsData = await this.getTeamsWithPlayers();
+    
+    if (allTeamsData.length === 0) {
+      // If there are no teams, return 0% for all players
+      return allPlayers.map(player => ({
+        playerId: player.id,
+        count: 0,
+        percentage: 0
+      }));
+    }
+    
+    // Calculate selection count for each player
+    const playerSelectionCount: Record<number, number> = {};
+    
+    // Initialize counters for all players
+    allPlayers.forEach(player => {
+      playerSelectionCount[player.id] = 0;
+    });
+    
+    // Count selections
+    allTeamsData.forEach(teamData => {
+      teamData.players.forEach((player: any) => {
+        if (playerSelectionCount[player.id] !== undefined) {
+          playerSelectionCount[player.id]++;
+        }
+      });
+    });
+    
+    // Calculate percentages
+    const totalTeams = allTeamsData.length;
+    
+    return Object.entries(playerSelectionCount).map(([playerId, count]) => ({
+      playerId: parseInt(playerId),
+      count,
+      percentage: Math.round((count / totalTeams) * 100)
+    }));
   }
 }
 

@@ -59,9 +59,10 @@ export default function TeamCreatePage() {
     enabled: Boolean(user && !userTeam),
   });
   
-  // Fetch all players
-  const { data: players = [], isLoading: isLoadingPlayers } = useQuery<Player[]>({
-    queryKey: ['/api/players'],
+  // Fetch all players with selection statistics
+  const { data: players = [], isLoading: isLoadingPlayers } = useQuery<(Player & { selectionPercentage?: number })[]>({
+    queryKey: ['/api/players', { stats: true }],
+    queryFn: () => fetch('/api/players?stats=true').then(res => res.json()),
     enabled: Boolean(user && !userTeam),
   });
   
