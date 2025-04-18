@@ -1,11 +1,14 @@
 
+-- Create schema if it doesn't exist
+CREATE SCHEMA IF NOT EXISTS public;
+
 -- Drop existing tables if they exist
-DROP TABLE IF EXISTS team_players;
-DROP TABLE IF EXISTS teams;
-DROP TABLE IF EXISTS players;
-DROP TABLE IF EXISTS player_categories;
-DROP TABLE IF EXISTS matches;
-DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS team_players CASCADE;
+DROP TABLE IF EXISTS teams CASCADE;
+DROP TABLE IF EXISTS players CASCADE;
+DROP TABLE IF EXISTS player_categories CASCADE;
+DROP TABLE IF EXISTS matches CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
 
 -- Create users table
 CREATE TABLE users (
