@@ -104,6 +104,7 @@ export class DatabaseStorage implements IStorage {
       id: players.id,
       name: players.name,
       categoryId: players.categoryId,
+      selectionPoints: players.selectionPoints,
       creditPoints: players.creditPoints,
       performancePoints: players.performancePoints,
       runs: players.runs,
@@ -116,11 +117,18 @@ export class DatabaseStorage implements IStorage {
       id: players.id,
       name: players.name,
       categoryId: players.categoryId,
+      selectionPoints: players.selectionPoints,
       creditPoints: players.creditPoints,
       performancePoints: players.performancePoints,
       runs: players.runs,
       wickets: players.wickets
     }).from(players);
+  }
+
+  async updateMatchStatus(matchId: number, status: string): Promise<void> {
+    await db.update(matches)
+      .set({ status })
+      .where(eq(matches.id, matchId));
   }
 
   async getPlayer(id: number): Promise<Player | undefined> {

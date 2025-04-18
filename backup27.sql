@@ -23,6 +23,7 @@ CREATE TABLE players (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     category_id INTEGER NOT NULL REFERENCES player_categories(id),
+    selection_points INTEGER NOT NULL DEFAULT 0,
     credit_points INTEGER NOT NULL DEFAULT 0,
     performance_points INTEGER NOT NULL DEFAULT 0,
     runs INTEGER DEFAULT 0,
@@ -52,36 +53,40 @@ CREATE TABLE matches (
     id SERIAL PRIMARY KEY,
     team1 TEXT NOT NULL,
     team2 TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'live',
+    status TEXT NOT NULL DEFAULT 'upcoming',
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
--- Insert existing data
+-- Insert player categories
 INSERT INTO player_categories (id, name) VALUES
 (1, 'All Rounder'),
 (2, 'Batsman'),
 (3, 'Bowler'),
 (4, 'Wicketkeeper');
 
-INSERT INTO players (id, name, category_id, credit_points, performance_points, runs, wickets) VALUES
-(1, 'Ankur', 1, 200, 200, 75, 2),
-(2, 'Prince', 1, 150, 150, 50, 1),
-(3, 'Mayank', 1, 140, 140, 45, 1),
-(4, 'Amit', 1, 150, 150, 55, 1),
-(5, 'Kuki', 2, 160, 160, 80, 0),
-(6, 'Captain', 2, 90, 90, 45, 0),
-(7, 'Chintu', 2, 110, 110, 55, 0),
-(8, 'Paras Kumar', 2, 90, 90, 45, 0),
-(9, 'Pushkar', 2, 100, 100, 50, 0),
-(10, 'Dhilu', 2, 55, 55, 25, 0),
-(11, 'Kamal', 2, 110, 110, 55, 0),
-(12, 'Ajay', 2, 35, 35, 15, 0),
-(13, 'Pulkit', 3, 55, 55, 5, 1),
-(14, 'Nitish', 3, 110, 110, 10, 3),
-(15, 'Rahul', 3, 110, 110, 5, 3),
-(16, 'Karambeer', 3, 95, 95, 5, 2),
-(17, 'Manga', 3, 90, 90, 10, 2),
-(18, 'None', 4, 0, 0, 0, 0);
+-- Insert players with updated points
+INSERT INTO players (id, name, category_id, selection_points, credit_points, performance_points, runs, wickets) VALUES
+-- All Rounders
+(1, 'Ankur', 1, 200, 0, 0, 75, 2),
+(2, 'Prince', 1, 150, 0, 0, 50, 1),
+(3, 'Mayank', 1, 140, 0, 0, 45, 1),
+(4, 'Amit', 1, 150, 0, 0, 55, 1),
+-- Batsmen
+(5, 'Kuki', 2, 160, 0, 0, 80, 0),
+(6, 'Captain', 2, 90, 0, 0, 45, 0),
+(7, 'Chintu', 2, 110, 0, 0, 55, 0),
+(8, 'Paras Kumar', 2, 90, 0, 0, 45, 0),
+(9, 'Pushkar', 2, 100, 0, 0, 50, 0),
+(10, 'Dhilu', 2, 55, 0, 0, 25, 0),
+(11, 'Kamal', 2, 110, 0, 0, 55, 0),
+(12, 'Ajay', 2, 35, 0, 0, 15, 0),
+-- Bowlers
+(13, 'Pulkit', 3, 55, 0, 0, 5, 1),
+(14, 'Nitish', 3, 110, 0, 0, 10, 3),
+(15, 'Rahul', 3, 110, 0, 0, 5, 3),
+(16, 'Karambeer', 3, 95, 0, 0, 5, 2),
+(17, 'Manga', 3, 90, 0, 0, 10, 2),
+(18, 'None', 4, 0, 0, 0, 0, 0);
 
 INSERT INTO users (id, username, password, name, email, is_admin, created_at) VALUES
 (1, 'ritikji', 'cc1cec35f9a7c014b47a9ffb0c4ad16f08b4eb48d0f33e8ad1b6266c8c6497b52f5b3123fdee9f8d49a67a6822f84b0caf2d8db854767ef515a83809e434b674.0b761cd4852a59e5c8e36dba7f8b5e2a', 'Ritik', 'r1@gmail.com', false, '2025-04-18 03:42:40.202427'),
@@ -90,6 +95,7 @@ INSERT INTO users (id, username, password, name, email, is_admin, created_at) VA
 (4, 'Ritikji', '267f5e04e490d0beaed7e9851502411b9eabe8ec59dde3380b9fab1ed6de6f85371b391119afc646299c6749e98e81b0e2c52f42363ca888518e2870480f45e9.158113817b9f0e15abd74386fc923341', 'Ritik', 'r12@gmail.com', false, '2025-04-18 04:26:40.657741'),
 (5, 'dhankhar18_45_07', '2829dece819cc803a596f3ff7ccbf5d5657f0936ece2f23b9678b0fd0106f21d2929181f8167ae8443a294a22260951947f1a444d346530a0947fa62832996bf.a082387d8a4513dc4ee3b647f1f8f89e', 'mayank dhankhar', 'dhankharmanju299@gmail.com', false, '2025-04-18 04:29:44.762958'),
 (6, 'Sahil', 'd071339d03c0c77034b27a732adff20e8c3d62eb3917896db38685cb69f20e97e2f40ad4a22f0614942d6e4914ca4e5f6a900d9ea9fd733377fcce2fe7b58d5e.a2048be09202701795b0f52e5c945cd3', 'Sahil', 'sahil221201singh@gmail.com', false, '2025-04-18 04:31:37.088181');
+
 
 INSERT INTO teams (id, name, user_id, created_at) VALUES
 (1, 'ritik', 1, '2025-04-18 03:43:33.053733'),
@@ -112,7 +118,7 @@ INSERT INTO team_players (team_id, player_id, is_captain, is_vice_captain, credi
 (2, 12, false, false, 35);
 
 INSERT INTO matches (id, team1, team2, status, created_at) VALUES
-(1, 'Team Dominator', 'Team Destroyer', 'live', '2025-04-18 03:41:11.729');
+(1, 'Team Dominator', 'Team Destroyer', 'upcoming', '2025-04-18 03:41:11.729');
 
 -- Set sequence values
 SELECT setval('users_id_seq', 6, true);

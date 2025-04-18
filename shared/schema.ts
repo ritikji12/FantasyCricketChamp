@@ -24,10 +24,20 @@ export const players = pgTable("players", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   categoryId: integer("category_id").notNull().references(() => playerCategories.id),
+  selectionPoints: integer("selection_points").notNull().default(0),
   creditPoints: integer("credit_points").notNull().default(0),
   performancePoints: integer("performance_points").notNull().default(0),
   runs: integer("runs").default(0),
   wickets: integer("wickets").default(0),
+});
+
+// Add contest status column to matches
+export const matches = pgTable("matches", {
+  id: serial("id").primaryKey(),
+  team1: text("team1").notNull(),
+  team2: text("team2").notNull(),
+  status: text("status").notNull().default("upcoming"), // upcoming, live, completed
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // Teams table
