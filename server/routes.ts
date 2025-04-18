@@ -87,6 +87,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Admin routes
+  app.patch("/api/admin/teams/:teamId", ensureAdmin, async (req, res) => {
+    try {
+      const teamId = parseInt(req.params.teamId);
+      const { playerIds, captainId, viceCaptainId } = req.body;
+
+      // Validate new team composition
+      const players = await storage.getAllPlayers();
+      const bowlerCategory = await storage.getPlayerCategoryByName("Bowler");
+      
+      if (!bowlerCategory) {
+        return res.status(400).json({ message: "Bowler category not found" });
+      }
+
+      const selectedBowlers = players
+        .filter(p => playerIds.includes(p.id) && p.categoryId === bowlerCategory.id)
+        .length;
+
+      if (selectedBowlers < 3) {
+        return res.status(400).json({ message: "Team must include at least 3 bowlers" });
+      }
+
+      // Delete existing team players
+      await db.delete(teamPlayers).where(eq(teamPlayers.teamId, teamId));
+
+      // Add new players
+      for (const playerId of playerIds) {
+        await storage.addPlayerToTeam({
+          teamId,
+          playerId,
+          isCaptain: playerId === captainId,
+          isViceCaptain: playerId === viceCaptainId
+        });
+      }
+
+      const updatedTeam = await storage.getTeam(teamId);
+      const updatedPlayers = await storage.getTeamPlayers(teamId);
+
+      res.json({ team: updatedTeam, players: updatedPlayers });
+    } catch (error) {
+      console.error("Error updating team:", error);
+      res.status(500).json({ message: "Error updating team" });
+    }
+  });
+
   app.patch("/api/admin/players/:id/points", ensureAdmin, async (req, res) => {
     try {
       const playerId = parseInt(req.params.id);
@@ -138,6 +182,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if team exceeds 1000 points/credits limit
       if (totalCredits > 1000) {
         return res.status(400).json({ message: "Team exceeds the 1000 points credit limit" });
+      }
+
+      // Check for minimum 3 bowlers requirement
+      const players = await storage.getAllPlayers();
+      const bowlerCategory = await storage.getPlayerCategoryByName("Bowler");
+      if (!bowlerCategory) {
+        return res.status(400).json({ message: "Bowler category not found" });
+      }
+
+      const selectedBowlers = players
+        .filter(p => playerIds.includes(p.id) && p.categoryId === bowlerCategory.id)
+        .length;
+
+      if (selectedBowlers < 3) {
+        return res.status(400).json({ message: "Team must include at least 3 bowlers" });
       }
       
       // Validate captain and vice-captain

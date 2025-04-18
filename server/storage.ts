@@ -188,7 +188,7 @@ export class DatabaseStorage implements IStorage {
         id: players.id,
         name: players.name,
         categoryId: players.categoryId,
-        points: players.points,
+        points: players.creditPoints,
         runs: players.runs,
         wickets: players.wickets,
         isCaptain: teamPlayers.isCaptain,
