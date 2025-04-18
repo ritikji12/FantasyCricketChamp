@@ -1,7 +1,7 @@
 import express from 'express';
 import session from 'express-session';
 import { createServer } from 'http';
-import { registerRoutes } from './route';    // <-- your single route file
+import { registerRoutes } from './routes';    // <-- your single route file
 import { db } from './db';
 
 async function main() {
