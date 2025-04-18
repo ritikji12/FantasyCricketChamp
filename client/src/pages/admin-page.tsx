@@ -20,6 +20,21 @@ export default function AdminPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   
+  // State for new match form
+  const [newMatch, setNewMatch] = useState({
+    team1: '',
+    team2: '',
+    date: new Date().toISOString().split('T')[0]
+  });
+  
+  // State for new contest form
+  const [newContest, setNewContest] = useState({
+    name: '',
+    rules: '',
+    prize: '',
+    entryFee: 0
+  });
+  
   // Redirect if not admin
   React.useEffect(() => {
     if (user && !isAdmin) {
@@ -46,7 +61,20 @@ export default function AdminPage() {
     queryKey: ['/api/admin/teams'],
     enabled: Boolean(isAdmin)
   });
+  
+  // Fetch matches
+  const { data: matches = [], isLoading: isLoadingMatches } = useQuery({
+    queryKey: ['/api/admin/matches'],
+    enabled: Boolean(isAdmin)
+  });
+  
+  // Fetch contests
+  const { data: contests = [], isLoading: isLoadingContests } = useQuery({
+    queryKey: ['/api/admin/contests'],
+    enabled: Boolean(isAdmin)
+  });
 
+  // Update player points mutation
   // Update player points mutation
   const updatePlayerMutation = useMutation({
     mutationFn: async (player: UpdatePlayerPoints) => {
@@ -65,6 +93,76 @@ export default function AdminPage() {
     onError: (error: Error) => {
       toast({
         title: "Failed to update player scores",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Delete team mutation
+  const deleteTeamMutation = useMutation({
+    mutationFn: async (teamId: number) => {
+      const res = await apiRequest("DELETE", `/api/admin/teams/${teamId}`);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/teams'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
+      toast({
+        title: "Team deleted",
+        description: "The team has been deleted successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to delete team",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Create match mutation
+  const createMatchMutation = useMutation({
+    mutationFn: async (matchData: { team1: string, team2: string, date: string }) => {
+      const res = await apiRequest("POST", "/api/admin/matches", matchData);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/matches'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/match/current'] });
+      toast({
+        title: "Match created",
+        description: "New match has been created successfully.",
+      });
+      setNewMatch({ team1: '', team2: '', date: new Date().toISOString().split('T')[0] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to create match",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Create contest mutation
+  const createContestMutation = useMutation({
+    mutationFn: async (contestData: { name: string, rules: string, prize: string, entryFee: number }) => {
+      const res = await apiRequest("POST", "/api/admin/contests", contestData);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/contests'] });
+      toast({
+        title: "Contest created",
+        description: "New contest has been created successfully.",
+      });
+      setNewContest({ name: '', rules: '', prize: '', entryFee: 0 });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to create contest",
         description: error.message,
         variant: "destructive",
       });
@@ -325,6 +423,110 @@ export default function AdminPage() {
               </Card>
               
               {/* User teams list */}
+              {/* Create Match */}
+              <Card className="mb-6">
+                <CardContent className="pt-6">
+                  <h3 className="font-montserrat font-bold text-lg mb-4">Create New Match</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <Label htmlFor="team1" className="block text-gray-700 mb-1">Team 1</Label>
+                      <Input 
+                        id="team1" 
+                        value={newMatch.team1} 
+                        onChange={(e) => setNewMatch({...newMatch, team1: e.target.value})}
+                        placeholder="Enter team name"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="team2" className="block text-gray-700 mb-1">Team 2</Label>
+                      <Input 
+                        id="team2" 
+                        value={newMatch.team2} 
+                        onChange={(e) => setNewMatch({...newMatch, team2: e.target.value})}
+                        placeholder="Enter team name"
+                      />
+                    </div>
+                  </div>
+                  <div className="mb-4">
+                    <Label htmlFor="matchDate" className="block text-gray-700 mb-1">Match Date</Label>
+                    <Input 
+                      id="matchDate" 
+                      type="date"
+                      value={newMatch.date} 
+                      onChange={(e) => setNewMatch({...newMatch, date: e.target.value})}
+                    />
+                  </div>
+                  <Button 
+                    onClick={() => createMatchMutation.mutate(newMatch)}
+                    className="bg-[#2ABDC0] hover:bg-[#2ABDC0]/90"
+                    disabled={createMatchMutation.isPending || !newMatch.team1 || !newMatch.team2}
+                  >
+                    {createMatchMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    Create Match
+                  </Button>
+                </CardContent>
+              </Card>
+              
+              {/* Create Contest */}
+              <Card className="mb-6">
+                <CardContent className="pt-6">
+                  <h3 className="font-montserrat font-bold text-lg mb-4">Create New Contest</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <Label htmlFor="contestName" className="block text-gray-700 mb-1">Contest Name</Label>
+                      <Input 
+                        id="contestName" 
+                        value={newContest.name} 
+                        onChange={(e) => setNewContest({...newContest, name: e.target.value})}
+                        placeholder="Enter contest name"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="entryFee" className="block text-gray-700 mb-1">Entry Fee (points)</Label>
+                      <Input 
+                        id="entryFee" 
+                        type="number"
+                        value={newContest.entryFee} 
+                        onChange={(e) => setNewContest({...newContest, entryFee: parseInt(e.target.value) || 0})}
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                  <div className="mb-4">
+                    <Label htmlFor="prize" className="block text-gray-700 mb-1">Prize Details</Label>
+                    <Input 
+                      id="prize" 
+                      value={newContest.prize} 
+                      onChange={(e) => setNewContest({...newContest, prize: e.target.value})}
+                      placeholder="e.g. ₹10,000 for 1st place, ₹5,000 for 2nd place"
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <Label htmlFor="rules" className="block text-gray-700 mb-1">Contest Rules</Label>
+                    <textarea 
+                      id="rules" 
+                      className="w-full min-h-[100px] p-2 border border-gray-300 rounded-md"
+                      value={newContest.rules} 
+                      onChange={(e) => setNewContest({...newContest, rules: e.target.value})}
+                      placeholder="Enter contest rules and details"
+                    />
+                  </div>
+                  <Button 
+                    onClick={() => createContestMutation.mutate(newContest)}
+                    className="bg-[#2ABDC0] hover:bg-[#2ABDC0]/90"
+                    disabled={createContestMutation.isPending || !newContest.name}
+                  >
+                    {createContestMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    Create Contest
+                  </Button>
+                </CardContent>
+              </Card>
+              
+              {/* Registered Teams */}
               <Card>
                 <CardContent className="pt-6">
                   <h3 className="font-montserrat font-bold text-lg mb-4">Registered Teams</h3>
@@ -337,6 +539,7 @@ export default function AdminPage() {
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Players</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Points</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">

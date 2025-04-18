@@ -153,6 +153,16 @@ export default function TeamCreatePage() {
         const newSelection = prev.filter(id => id !== playerId);
         return newSelection;
       } else {
+        // Check if adding would exceed the 8 player limit
+        if (prev.length >= 8) {
+          toast({
+            title: "Player limit reached",
+            description: "You can only select a maximum of 8 players for your team.",
+            variant: "destructive",
+          });
+          return prev;
+        }
+        
         // Check if adding would exceed 1000 credits
         const playerToAdd = players.find(p => p.id === playerId);
         const newTotal = totalCredits + (playerToAdd?.points || 0);
@@ -194,10 +204,10 @@ export default function TeamCreatePage() {
       return;
     }
     
-    if (selectedPlayers.length === 0) {
+    if (selectedPlayers.length !== 8) {
       toast({
-        title: "No players selected",
-        description: "Please select at least one player for your team.",
+        title: "Player selection invalid",
+        description: "You must select exactly 8 players for your team.",
         variant: "destructive",
       });
       return;
@@ -300,10 +310,14 @@ export default function TeamCreatePage() {
           <Card className="mt-6">
             <CardContent className="pt-6">
               <h2 className="font-montserrat font-bold text-xl mb-4">Create Your Fantasy Team</h2>
-              <p className="text-gray-600 mb-4">
-                Select players for your team using a maximum of 1000 credit points. Choose a Captain (2x points) and 
-                Vice-Captain (1.5x points) from your selected players.
-              </p>
+              <div className="bg-blue-50 border-l-4 border-blue-500 p-3 mb-4">
+                <p className="text-gray-700 font-medium">Team Requirements:</p>
+                <ul className="text-gray-600 text-sm list-disc ml-5 mt-1">
+                  <li>Select exactly 8 players</li>
+                  <li>Maximum of 1000 credit points</li>
+                  <li>Choose 1 Captain (2x points) and 1 Vice-Captain (1.5x points)</li>
+                </ul>
+              </div>
               
               <div className="mb-4">
                 <Label htmlFor="team-name" className="block text-gray-700 mb-2 font-medium">Team Name</Label>
@@ -584,18 +598,25 @@ export default function TeamCreatePage() {
                 </div>
               </div>
               
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowPreview(false)}>Edit Team</Button>
-                <Button 
-                  className="bg-[#2ABDC0] hover:bg-[#2ABDC0]/90"
-                  onClick={handleConfirmTeam}
-                  disabled={createTeamMutation.isPending}
-                >
-                  {createTeamMutation.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : null}
-                  Confirm Team
-                </Button>
+              <DialogFooter className="flex-col space-y-2 sm:space-y-0">
+                <div className="flex flex-col sm:flex-row gap-2 w-full justify-end">
+                  <Button variant="outline" onClick={() => setShowPreview(false)}>
+                    Edit Team
+                  </Button>
+                  <Button 
+                    className="bg-[#2ABDC0] hover:bg-[#2ABDC0]/90"
+                    onClick={handleConfirmTeam}
+                    disabled={createTeamMutation.isPending}
+                  >
+                    {createTeamMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    Save & Join Contest
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500 text-center sm:text-right">
+                  After joining the contest, you'll be able to view your ranking and players' scores.
+                </p>
               </DialogFooter>
             </DialogContent>
           </Dialog>
