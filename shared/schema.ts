@@ -142,6 +142,10 @@ export const teamRankingSchema = z.object({
 
 export type TeamRanking = z.infer<typeof teamRankingSchema>;
 
+// Contest exports
+export type Contest = typeof contests.$inferSelect;
+export type InsertContest = z.infer<typeof insertContestSchema>;
+
 // Schema for updating player points
 export const updatePlayerPointsSchema = z.object({
   points: z.number()
