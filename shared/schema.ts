@@ -1,3 +1,4 @@
+
 import { pgTable, text, serial, integer, boolean, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -7,6 +8,8 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
   isAdmin: boolean("is_admin").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -14,6 +17,8 @@ export const users = pgTable("users", {
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
+  name: true,
+  email: true,
   isAdmin: true,
 });
 
@@ -23,30 +28,6 @@ export const playerCategories = pgTable("player_categories", {
   name: text("name").notNull().unique(),
 });
 
-// Contest Table
-export const contests = pgTable("contests", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  description: text("description"),
-  rules: text("rules"),
-  prizePool: integer("prize_pool").default(0).notNull(),
-  entryFee: integer("entry_fee").default(0).notNull(),
-  maxEntries: integer("max_entries").default(100).notNull(),
-  isLive: boolean("is_live").default(false).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const insertContestSchema = createInsertSchema(contests).pick({
-  name: true,
-  description: true,
-  rules: true,
-  prizePool: true,
-  entryFee: true,
-  maxEntries: true,
-  isLive: true,
-});
-
 // Players Table
 export const players = pgTable("players", {
   id: serial("id").primaryKey(),
@@ -54,7 +35,8 @@ export const players = pgTable("players", {
   categoryId: integer("category_id").notNull(),
   creditPoints: integer("credit_points").default(0).notNull(),
   performancePoints: integer("performance_points").default(0).notNull(),
-  selectionPercent: integer("selection_percent").default(0).notNull(),
+  runs: integer("runs").default(0),
+  wickets: integer("wickets").default(0),
 });
 
 export const insertPlayerSchema = createInsertSchema(players).pick({
@@ -62,7 +44,8 @@ export const insertPlayerSchema = createInsertSchema(players).pick({
   categoryId: true,
   creditPoints: true,
   performancePoints: true,
-  selectionPercent: true,
+  runs: true,
+  wickets: true,
 });
 
 // Teams Table
@@ -70,40 +53,43 @@ export const teams = pgTable("teams", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   userId: integer("user_id").notNull(),
-  contestId: integer("contest_id").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const insertTeamSchema = createInsertSchema(teams).pick({
   name: true,
   userId: true,
-  contestId: true,
 });
 
 // Team Players (Junction Table)
 export const teamPlayers = pgTable("team_players", {
-  id: serial("id").primaryKey(),
   teamId: integer("team_id").notNull(),
   playerId: integer("player_id").notNull(),
-  playerCreditPoints: integer("player_credit_points").default(0).notNull(), // Store credit points at time of selection
   isCaptain: boolean("is_captain").default(false).notNull(),
   isViceCaptain: boolean("is_vice_captain").default(false).notNull(),
+  playerCreditPoints: integer("credit_points_at_selection").default(0).notNull(),
 });
 
 export const insertTeamPlayerSchema = createInsertSchema(teamPlayers).pick({
   teamId: true,
   playerId: true,
-  playerCreditPoints: true,
   isCaptain: true,
   isViceCaptain: true,
+  playerCreditPoints: true,
+});
+
+// Matches Table
+export const matches = pgTable("matches", {
+  id: serial("id").primaryKey(),
+  team1: text("team1").notNull(),
+  team2: text("team2").notNull(),
+  status: text("status").default("live").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
-
-export type Contest = typeof contests.$inferSelect;
-export type InsertContest = z.infer<typeof insertContestSchema>;
 
 export type PlayerCategory = typeof playerCategories.$inferSelect;
 export type Player = typeof players.$inferSelect;
@@ -115,6 +101,8 @@ export type InsertTeam = z.infer<typeof insertTeamSchema>;
 export type TeamPlayer = typeof teamPlayers.$inferSelect;
 export type InsertTeamPlayer = z.infer<typeof insertTeamPlayerSchema>;
 
+export type Match = typeof matches.$inferSelect;
+
 // Extended schemas
 export const playerWithCategorySchema = z.object({
   id: z.number(),
@@ -123,7 +111,8 @@ export const playerWithCategorySchema = z.object({
   categoryName: z.string(),
   creditPoints: z.number(),
   performancePoints: z.number(),
-  selectionPercent: z.number(),
+  runs: z.number().optional(),
+  wickets: z.number().optional(),
   isCaptain: z.boolean().optional(),
   isViceCaptain: z.boolean().optional(),
 });
@@ -134,9 +123,6 @@ export const teamWithPlayersSchema = z.object({
   id: z.number(),
   name: z.string(),
   userId: z.number(),
-  contestId: z.number(),
-  contestName: z.string().optional(),
-  isLive: z.boolean().optional(),
   username: z.string().nullable(),
   createdAt: z.date().optional(),
   players: z.array(playerWithCategorySchema),
