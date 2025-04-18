@@ -1,11 +1,11 @@
 import { db } from "./db";
 import { eq, sql, and, desc, asc } from "drizzle-orm";
 import { 
-  users, teams, players, teamPlayers, playerCategories, contests,
+  users, teams, players, teamPlayers, playerCategories, contests, matches,
   type User, type InsertUser, type Player, type InsertPlayer,
   type Team, type InsertTeam, type TeamPlayer, type InsertTeamPlayer,
   type PlayerWithCategory, type TeamWithPlayers, type TeamRanking,
-  type Contest, type InsertContest
+  type Contest, type InsertContest, type Match
 } from "@shared/schema";
 import session from "express-session";
 import { Store } from "express-session";
@@ -380,16 +380,16 @@ export class DatabaseStorage implements IStorage {
     return sortedTeams;
   }
 
-  async getCurrentMatch() {
-  const [match] = await db
-    .select()
-    .from(matches)
-    .where(eq(matches.status, 'live'))
-    .orderBy(desc(matches.createdAt))
-    .limit(1);
-  
-  return match;
-}
+  async getCurrentMatch(): Promise<Match | undefined> {
+    const [match] = await db
+      .select()
+      .from(matches)
+      .where(eq(matches.status, 'live'))
+      .orderBy(desc(matches.createdAt))
+      .limit(1);
+    
+    return match;
+  }
 
 async getAllTeamsWithPlayers(): Promise<TeamWithPlayers[]> {
     const allTeams = await db
