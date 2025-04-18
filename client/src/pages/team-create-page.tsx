@@ -197,6 +197,19 @@ export default function TeamCreatePage() {
       });
       return;
     }
+
+    const selectedBowlers = selectedPlayerObjects.filter(
+      player => getPlayerCategory(player.id) === "Bowler"
+    ).length;
+
+    if (selectedBowlers < 2) {
+      toast({
+        title: "Insufficient bowlers",
+        description: "You must select at least 2 bowlers for your team.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     if (selectedPlayers.length === 0) {
       toast({
