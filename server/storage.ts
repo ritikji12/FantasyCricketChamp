@@ -21,12 +21,34 @@ export interface IStorage {
   getPlayerCategoryByName(name: string): Promise<PlayerCategory | undefined>;
   createPlayerCategory(category: InsertPlayerCategory): Promise<PlayerCategory>;
 
-  // Players
-  getPlayersByCategory(categoryId: number): Promise<Player[]>;
-  getAllPlayers(): Promise<Player[]>;
-  getPlayer(id: number): Promise<Player | undefined>;
-  createPlayer(player: InsertPlayer): Promise<Player>;
-  updatePlayerPoints(playerData: UpdatePlayerPoints): Promise<Player>;
+ // Players
+async getAllPlayers(): Promise<Player[]> {
+  return db.select({
+    id: players.id,
+    name: players.name,
+    categoryId: players.categoryId,
+    selection_points: players.selection_points, // Ensure this is fetched correctly.
+    creditPoints: players.credit_points, // Change reference to credit_points.
+    performancePoints: players.performance_points, // Change reference to performance_points.
+    runs: players.runs,
+    wickets: players.wickets,
+  }).from(players);
+}
+
+async getPlayersByCategory(categoryId: number): Promise<Player[]> {
+  return db.select({
+    id: players.id,
+    name: players.name,
+    categoryId: players.categoryId,
+    selection_points: players.selection_points, // Ensure this is fetched correctly.
+    creditPoints: players.credit_points, // Change reference to credit_points.
+    performancePoints: players.performance_points, // Change reference to performance_points.
+    runs: players.runs,
+    wickets: players.wickets,
+  }).from(players).where(eq(players.categoryId, categoryId));
+}
+
+// Ensure your getPlayer function also captures all relevant fields if it fetches individual players.
 
   // Teams
   getUserTeam(userId: number): Promise<Team | undefined>;
