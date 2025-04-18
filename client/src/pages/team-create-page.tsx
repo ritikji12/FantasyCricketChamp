@@ -202,10 +202,10 @@ export default function TeamCreatePage() {
       player => getPlayerCategory(player.id) === "Bowler"
     ).length;
 
-    if (selectedBowlers < 2) {
+    if (selectedBowlers < 3) {
       toast({
         title: "Insufficient bowlers",
-        description: "You must select at least 2 bowlers for your team.",
+        description: "You must select at least 3 bowlers for your team.",
         variant: "destructive",
       });
       return;
