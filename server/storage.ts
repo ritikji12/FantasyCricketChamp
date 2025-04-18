@@ -103,7 +103,7 @@ export class DatabaseStorage implements IStorage {
     return db.select({
       id: players.id,
       name: players.name,
-      categoryId: players.category_id, // ensure this matches your schema
+      categoryId: players.category_id,
       selection_points: players.selection_points,
       creditPoints: players.credit_points,
       performancePoints: players.performance_points,
@@ -140,7 +140,7 @@ export class DatabaseStorage implements IStorage {
       .set({
         runs: playerData.runs,
         wickets: playerData.wickets,
-        selection_points: playerData.points, // Ensure correct naming here
+        selection_points: playerData.points,
       })
       .where(eq(players.id, playerData.id))
       .returning();
@@ -209,7 +209,7 @@ export class DatabaseStorage implements IStorage {
   async calculateTeamPoints(teamId: number): Promise<number> {
     const players = await this.getTeamPlayers(teamId);
     return players.reduce((totalPoints, player) => {
-      return totalPoints + player.selection_points; // Ensure this reflects the points correctly
+      return totalPoints + player.selection_points;
     }, 0);
   }
 
