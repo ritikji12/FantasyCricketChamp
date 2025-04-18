@@ -10,7 +10,12 @@ if (!connectionString) {
 }
 
 // Create connection pool
-export const pool = new pg.Pool({ connectionString });
+export const pool = new pg.Pool({
+  connectionString,
+  ssl: {
+    rejectUnauthorized: false,
+  },
+});
 
 // Create drizzle database instance
 export const db = drizzle(pool, { schema });
