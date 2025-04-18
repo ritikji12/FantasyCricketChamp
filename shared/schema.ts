@@ -5,7 +5,7 @@ import {
   serial,
   boolean,
   primaryKey,
-  timestamp
+  timestamp,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -39,7 +39,7 @@ export const players = pgTable("players", {
   wickets: integer("wickets").default(0),
 });
 
-// Matches table (keep only this one)
+// Matches table
 export const matches = pgTable("matches", {
   id: serial("id").primaryKey(),
   team1: text("team1").notNull(),
