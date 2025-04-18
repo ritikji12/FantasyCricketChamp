@@ -100,11 +100,27 @@ export class DatabaseStorage implements IStorage {
 
   // Players
   async getPlayersByCategory(categoryId: number): Promise<Player[]> {
-    return db.select().from(players).where(eq(players.categoryId, categoryId));
+    return db.select({
+      id: players.id,
+      name: players.name,
+      categoryId: players.categoryId,
+      creditPoints: players.creditPoints,
+      performancePoints: players.performancePoints,
+      runs: players.runs,
+      wickets: players.wickets
+    }).from(players).where(eq(players.categoryId, categoryId));
   }
 
   async getAllPlayers(): Promise<Player[]> {
-    return db.select().from(players);
+    return db.select({
+      id: players.id,
+      name: players.name,
+      categoryId: players.categoryId,
+      creditPoints: players.creditPoints,
+      performancePoints: players.performancePoints,
+      runs: players.runs,
+      wickets: players.wickets
+    }).from(players);
   }
 
   async getPlayer(id: number): Promise<Player | undefined> {
