@@ -33,7 +33,7 @@ export interface IStorage {
   getTeam(id: number): Promise<Team | undefined>;
   createTeam(team: InsertTeam): Promise<Team>;
   addPlayerToTeam(teamPlayer: InsertTeamPlayer): Promise<void>;
-  getTeamPlayers(teamId: number): Promise<(Player & { isCaptain?: boolean, isViceCaptain?: boolean })[]>;
+  getTeamPlayers(teamId: number): Promise<(Player & { isCaptain?: boolean, isViceCaptain?: boolean })[]>; 
   getAllTeams(): Promise<Team[]>;
   getTeamsWithPlayers(): Promise<any[]>;
   deleteTeam(teamId: number): Promise<void>;
@@ -225,3 +225,7 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 }
+
+// Create and export the instance of DatabaseStorage
+const storage = new DatabaseStorage();
+export { storage };
