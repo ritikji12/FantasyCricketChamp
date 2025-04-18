@@ -21,34 +21,12 @@ export interface IStorage {
   getPlayerCategoryByName(name: string): Promise<PlayerCategory | undefined>;
   createPlayerCategory(category: InsertPlayerCategory): Promise<PlayerCategory>;
 
- // Players
-async getAllPlayers(): Promise<Player[]> {
-  return db.select({
-    id: players.id,
-    name: players.name,
-    categoryId: players.categoryId,
-    selection_points: players.selection_points, // Ensure this is fetched correctly.
-    creditPoints: players.credit_points, // Change reference to credit_points.
-    performancePoints: players.performance_points, // Change reference to performance_points.
-    runs: players.runs,
-    wickets: players.wickets,
-  }).from(players);
-}
-
-async getPlayersByCategory(categoryId: number): Promise<Player[]> {
-  return db.select({
-    id: players.id,
-    name: players.name,
-    categoryId: players.categoryId,
-    selection_points: players.selection_points, // Ensure this is fetched correctly.
-    creditPoints: players.credit_points, // Change reference to credit_points.
-    performancePoints: players.performance_points, // Change reference to performance_points.
-    runs: players.runs,
-    wickets: players.wickets,
-  }).from(players).where(eq(players.categoryId, categoryId));
-}
-
-// Ensure your getPlayer function also captures all relevant fields if it fetches individual players.
+  // Players
+  getAllPlayers(): Promise<Player[]>;
+  getPlayersByCategory(categoryId: number): Promise<Player[]>;
+  getPlayer(id: number): Promise<Player | undefined>;
+  createPlayer(player: InsertPlayer): Promise<Player>;
+  updatePlayerPoints(playerData: UpdatePlayerPoints): Promise<Player>;
 
   // Teams
   getUserTeam(userId: number): Promise<Team | undefined>;
@@ -122,11 +100,29 @@ export class DatabaseStorage implements IStorage {
 
   // Players
   async getPlayersByCategory(categoryId: number): Promise<Player[]> {
-    return db.select().from(players).where(eq(players.categoryId, categoryId));
+    return db.select({
+      id: players.id,
+      name: players.name,
+      categoryId: players.categoryId,
+      selection_points: players.selection_points,
+      creditPoints: players.credit_points,
+      performancePoints: players.performance_points,
+      runs: players.runs,
+      wickets: players.wickets,
+    }).from(players).where(eq(players.categoryId, categoryId));
   }
 
   async getAllPlayers(): Promise<Player[]> {
-    return db.select().from(players);
+    return db.select({
+      id: players.id,
+      name: players.name,
+      categoryId: players.categoryId,
+      selection_points: players.selection_points,
+      creditPoints: players.credit_points,
+      performancePoints: players.performance_points,
+      runs: players.runs,
+      wickets: players.wickets,
+    }).from(players);
   }
 
   async getPlayer(id: number): Promise<Player | undefined> {
@@ -144,7 +140,7 @@ export class DatabaseStorage implements IStorage {
       .set({
         runs: playerData.runs,
         wickets: playerData.wickets,
-        selectionPoints: playerData.points,
+        selection_points: playerData.points, // Ensure correct naming here
       })
       .where(eq(players.id, playerData.id))
       .returning();
@@ -213,7 +209,7 @@ export class DatabaseStorage implements IStorage {
   async calculateTeamPoints(teamId: number): Promise<number> {
     const players = await this.getTeamPlayers(teamId);
     return players.reduce((totalPoints, player) => {
-      return totalPoints + player.selectionPoints;
+      return totalPoints + player.selection_points; // Ensure this reflects the points correctly
     }, 0);
   }
 
