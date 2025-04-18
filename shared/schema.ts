@@ -1,4 +1,12 @@
-import { pgTable, text, integer, serial, boolean, primaryKey, timestamp } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  integer,
+  serial,
+  boolean,
+  primaryKey,
+  timestamp
+} from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -31,7 +39,7 @@ export const players = pgTable("players", {
   wickets: integer("wickets").default(0),
 });
 
-// Add contest status column to matches
+// Matches table (keep only this one)
 export const matches = pgTable("matches", {
   id: serial("id").primaryKey(),
   team1: text("team1").notNull(),
@@ -59,16 +67,7 @@ export const teamPlayers = pgTable("team_players", {
   pk: primaryKey({ columns: [t.teamId, t.playerId] }),
 }));
 
-// Match table
-export const matches = pgTable("matches", {
-  id: serial("id").primaryKey(),
-  team1: text("team1").notNull(),
-  team2: text("team2").notNull(),
-  status: text("status").notNull().default("live"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-// Create insert schemas
+// Insert schemas
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -84,7 +83,9 @@ export const insertPlayerCategorySchema = createInsertSchema(playerCategories).p
 export const insertPlayerSchema = createInsertSchema(players).pick({
   name: true,
   categoryId: true,
-  points: true,
+  selectionPoints: true,
+  creditPoints: true,
+  performancePoints: true,
   runs: true,
   wickets: true,
 });
@@ -99,6 +100,7 @@ export const insertTeamPlayerSchema = createInsertSchema(teamPlayers).pick({
   playerId: true,
   isCaptain: true,
   isViceCaptain: true,
+  creditPointsAtSelection: true,
 });
 
 export const insertMatchSchema = createInsertSchema(matches).pick({
@@ -120,7 +122,7 @@ export const createTeamWithPlayersSchema = z.object({
   playerIds: z.array(z.number()),
   captainId: z.number(),
   viceCaptainId: z.number(),
-  wicketkeeper: z.literal("None"),
+  wicketkeeper: z.string(),
   totalCredits: z.number().max(1000, "Total credits cannot exceed 1000 points"),
 });
 
