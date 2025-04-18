@@ -3,7 +3,7 @@ import { users, players, teams, teamPlayers, matches, playerCategories,
   type Team, type InsertTeam, type TeamPlayer, type InsertTeamPlayer, 
   type Match, type PlayerCategory, type InsertPlayerCategory, type UpdatePlayerPoints } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, sql, desc, asc } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 
@@ -99,30 +99,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Players
-  async getPlayersByCategory(categoryId: number): Promise<Player[]> {
-    return db.select({
-      id: players.id,
-      name: players.name,
-      categoryId: players.categoryId,
-      selection_points: players.selection_points,
-      creditPoints: players.credit_points,
-      performancePoints: players.performance_points,
-      runs: players.runs,
-      wickets: players.wickets,
-    }).from(players).where(eq(players.categoryId, categoryId));
-  }
-
   async getAllPlayers(): Promise<Player[]> {
     return db.select({
       id: players.id,
       name: players.name,
-      categoryId: players.categoryId,
+      categoryId: players.category_id, // ensure this matches your schema
       selection_points: players.selection_points,
       creditPoints: players.credit_points,
       performancePoints: players.performance_points,
       runs: players.runs,
       wickets: players.wickets,
     }).from(players);
+  }
+
+  async getPlayersByCategory(categoryId: number): Promise<Player[]> {
+    return db.select({
+      id: players.id,
+      name: players.name,
+      categoryId: players.category_id,
+      selection_points: players.selection_points,
+      creditPoints: players.credit_points,
+      performancePoints: players.performance_points,
+      runs: players.runs,
+      wickets: players.wickets,
+    }).from(players).where(eq(players.category_id, categoryId));
   }
 
   async getPlayer(id: number): Promise<Player | undefined> {
@@ -149,7 +149,7 @@ export class DatabaseStorage implements IStorage {
 
   // Teams
   async getUserTeam(userId: number): Promise<Team | undefined> {
-    const [team] = await db.select().from(teams).where(eq(teams.userId, userId));
+    const [team] = await db.select().from(teams).where(eq(teams.user_id, userId));
     return team;
   }
 
@@ -170,11 +170,11 @@ export class DatabaseStorage implements IStorage {
   async getTeamPlayers(teamId: number): Promise<(Player & { isCaptain?: boolean, isViceCaptain?: boolean })[]> {
     return db.select({
       ...players,
-      isCaptain: teamPlayers.isCaptain,
-      isViceCaptain: teamPlayers.isViceCaptain,
+      isCaptain: teamPlayers.is_captain,
+      isViceCaptain: teamPlayers.is_vice_captain,
     }).from(players)
-      .leftJoin(teamPlayers, eq(players.id, teamPlayers.playerId))
-      .where(eq(teamPlayers.teamId, teamId));
+      .leftJoin(teamPlayers, eq(players.id, teamPlayers.player_id))
+      .where(eq(teamPlayers.team_id, teamId));
   }
 
   async getAllTeams(): Promise<Team[]> {
@@ -182,7 +182,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTeamsWithPlayers(): Promise<any[]> {
-    return db.select().from(teams).leftJoin(teamPlayers, eq(teams.id, teamPlayers.teamId));
+    return db.select().from(teams).leftJoin(teamPlayers, eq(teams.id, teamPlayers.team_id));
   }
 
   async deleteTeam(teamId: number): Promise<void> {
@@ -229,10 +229,10 @@ export class DatabaseStorage implements IStorage {
 
   async getPlayerSelectionStats(): Promise<{ playerId: number, count: number, percentage: number }[]> {
     const playerStats = await db.select({
-      playerId: teamPlayers.playerId,
+      playerId: teamPlayers.player_id,
       count: sql`COUNT(*)`,
     }).from(teamPlayers)
-      .groupBy(teamPlayers.playerId);
+      .groupBy(teamPlayers.player_id);
 
     const totalTeams = await db.count().from(teams);
 
