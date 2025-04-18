@@ -155,3 +155,17 @@ export const teamRankingSchema = z.object({
 });
 
 export type TeamRanking = z.infer<typeof teamRankingSchema>;
+
+// Schema for updating player points
+export const updatePlayerPointsSchema = z.object({
+  points: z.number()
+});
+
+// Schema for creating team with players
+export const createTeamWithPlayersSchema = z.object({
+  name: z.string(),
+  contestId: z.number(),
+  playerIds: z.array(z.number()),
+  captain: z.number(),
+  viceCaptain: z.number()
+});
