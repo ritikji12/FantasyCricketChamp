@@ -1,5 +1,5 @@
 
-import { Pool } from 'pg';
+import pg from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import * as schema from "@shared/schema";
 
@@ -10,7 +10,7 @@ if (!connectionString) {
 }
 
 // Create connection pool
-export const pool = new Pool({ connectionString });
+export const pool = new pg.Pool({ connectionString });
 
 // Create drizzle database instance
 export const db = drizzle(pool, { schema });
