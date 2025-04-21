@@ -28,7 +28,36 @@ export interface IStorage {
   updateContest(id: number, data: Partial<InsertContest>): Promise<Contest>;
   deleteContest(id: number): Promise<void>;
   setContestLiveStatus(id: number, isLive: boolean): Promise<Contest>;
+  // Add this method inside the DatabaseStorage class in your storage.ts file
+async getUserByEmail(email: string): Promise<User | undefined> {
+  const [user] = await db.select().from(users).where(eq(users.email, email));
+  return user;
+}
+
+// Also add this fixed method to your DatabaseStorage class
+async getPlayerSelectionStats(): Promise<any[]> {
+  // Use sql template literal instead of db.sql function
+  const result = await db.execute(
+    sql`
+      SELECT 
+        p.id,
+        p.name,
+        p.category_id as "categoryId",
+        pc.name as "categoryName",
+        p.credit_points as "creditPoints",
+        p.performance_points as "performancePoints",
+        p.selection_percent as "selectionPercent",
+        COUNT(tp.player_id) as "selectedCount"
+      FROM players p
+      LEFT JOIN player_categories pc ON p.category_id = pc.id
+      LEFT JOIN team_players tp ON p.id = tp.player_id
+      GROUP BY p.id, pc.name
+      ORDER BY "selectedCount" DESC, p.name ASC
+    `
+  );
   
+  return result.rows;
+}
   // Player operations
   getPlayers(): Promise<PlayerWithCategory[]>;
   getPlayersByCategory(categoryId: number): Promise<PlayerWithCategory[]>;
