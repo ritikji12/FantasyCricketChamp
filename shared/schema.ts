@@ -17,6 +17,22 @@ export const insertUserSchema = createInsertSchema(users).pick({
   isAdmin: true,
 });
 
+export const matches = pgTable("matches", {
+  id: serial("id").primaryKey(),
+  team1: text("team1").notNull(),
+  team2: text("team2").notNull(),
+  status: text("status").default("live").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertMatchSchema = createInsertSchema(matches).pick({
+  team1: true,
+  team2: true,
+  status: true,
+});
+
+export type Match = typeof matches.$inferSelect;
+export type InsertMatch = z.infer<typeof insertMatchSchema>;
 // Player Categories
 export const playerCategories = pgTable("player_categories", {
   id: serial("id").primaryKey(),
