@@ -38,7 +38,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
 
   // Initialize database with player categories and players if they don't exist
-  await initializeDatabase();
+ // Fix for the initializeDatabase function in routes.ts
+
+async function initializeDatabase() {
+  try {
+    // Check if admin user exists
+    const adminUser = await storage.getUserByUsername("admin");
+    if (!adminUser) {
+      // Create admin user with fixed credentials
+      await storage.createUser({
+        username: "admin",
+        password: await hashPassword("ritik123"),
+        isAdmin: true
+      });
+      console.log("Admin user created with username: admin, password: ritik123");
+    }
+
+    // Initialize player categories if they don't exist
+    const categories = await storage.getPlayerCategories();
+    if (categories.length === 0) {
+      console.log("Creating player categories...");
+      // Use db.insert with values instead of direct SQL
+      await db.insert(playerCategories).values([
+        { name: "All-Rounder" },
+        { name: "Batsman" },
+        { name: "Bowler" },
+        { name: "Wicketkeeper" }
+      ]);
+      console.log("Player categories created");
+    }
+
+    // Initialize players if they don't exist
+    const allPlayers = await storage.getPlayers();
+    if (allPlayers.length === 0) {
+      console.log("Creating players...");
+
+      // Get category IDs
+      const categoriesAfterInsert = await storage.getPlayerCategories();
+      const categoryMap = new Map();
+      categoriesAfterInsert.forEach(category => {
+        categoryMap.set(category.name, category.id);
+      });
+
+      const allRounderId = categoryMap.get("All-Rounder");
+      const batsmanId = categoryMap.get("Batsman");
+      const bowlerId = categoryMap.get("Bowler");
+      const wicketkeeperId = categoryMap.get("Wicketkeeper");
+
+      // Add players properly using the ORM instead of raw SQL
+      await db.insert(players).values([
+        { name: "Ankur", categoryId: allRounderId, creditPoints: 200, performancePoints: 0, selectionPercent: 35 },
+        { name: "Prince", categoryId: allRounderId, creditPoints: 150, performancePoints: 0, selectionPercent: 28 },
+        { name: "Mayank", categoryId: allRounderId, creditPoints: 140, performancePoints: 0, selectionPercent: 25 },
+        { name: "Amit", categoryId: allRounderId, creditPoints: 150, performancePoints: 0, selectionPercent: 30 }
+      ]);
+
+      await db.insert(players).values([
+        { name: "Kuki", categoryId: batsmanId, creditPoints: 160, performancePoints: 0, selectionPercent: 40 },
+        { name: "Captain", categoryId: batsmanId, creditPoints: 90, performancePoints: 0, selectionPercent: 15 },
+        { name: "Chintu", categoryId: batsmanId, creditPoints: 110, performancePoints: 0, selectionPercent: 20 },
+        { name: "Paras Kumar", categoryId: batsmanId, creditPoints: 90, performancePoints: 0, selectionPercent: 18 },
+        { name: "Pushkar", categoryId: batsmanId, creditPoints: 100, performancePoints: 0, selectionPercent: 22 },
+        { name: "Dhilu", categoryId: batsmanId, creditPoints: 55, performancePoints: 0, selectionPercent: 10 },
+        { name: "Kamal", categoryId: batsmanId, creditPoints: 110, performancePoints: 0, selectionPercent: 25 },
+        { name: "Ajay", categoryId: batsmanId, creditPoints: 35, performancePoints: 0, selectionPercent: 5 }
+      ]);
+
+      await db.insert(players).values([
+        { name: "Pulkit", categoryId: bowlerId, creditPoints: 55, performancePoints: 0, selectionPercent: 15 },
+        { name: "Nitish", categoryId: bowlerId, creditPoints: 110, performancePoints: 0, selectionPercent: 30 },
+        { name: "Rahul", categoryId: bowlerId, creditPoints: 110, performancePoints: 0, selectionPercent: 30 },
+        { name: "Karambeer", categoryId: bowlerId, creditPoints: 95, performancePoints: 0, selectionPercent: 25 },
+        { name: "Manga", categoryId: bowlerId, creditPoints: 90, performancePoints: 0, selectionPercent: 20 }
+      ]);
+
+      await db.insert(players).values([
+        { name: "None", categoryId: wicketkeeperId, creditPoints: 0, performancePoints: 0, selectionPercent: 0 }
+      ]);
+
+      console.log("Players created successfully");
+    }
+  } catch (error) {
+    console.error("Failed to initialize database:", error);
+    throw error;
+  }
+}
 
   // Contest routes
 
