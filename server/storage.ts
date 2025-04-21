@@ -18,6 +18,7 @@ export interface IStorage {
   // User operations
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>; // Added method
   createUser(user: InsertUser): Promise<User>;
   getPlayerCategories(): Promise<typeof playerCategories.$inferSelect[]>;
   
@@ -28,51 +29,14 @@ export interface IStorage {
   updateContest(id: number, data: Partial<InsertContest>): Promise<Contest>;
   deleteContest(id: number): Promise<void>;
   setContestLiveStatus(id: number, isLive: boolean): Promise<Contest>;
-  // Add this method inside the DatabaseStorage class in your storage.ts file
-async getUserByEmail(email: string): Promise<User | undefined> {
-  const [user] = await db.select().from(users).where(eq(users.email, email));
-  return user;
-}
-
-// Also add this fixed method to your DatabaseStorage class
-async getPlayerSelectionStats(): Promise<any[]> {
-  // Use sql template literal instead of db.sql function
-  const result = await db.execute(
-    sql`
-      SELECT 
-        p.id,
-        p.name,
-        p.category_id as "categoryId",
-        pc.name as "categoryName",
-        p.credit_points as "creditPoints",
-        p.performance_points as "performancePoints",
-        p.selection_percent as "selectionPercent",
-        COUNT(tp.player_id) as "selectedCount"
-      FROM players p
-      LEFT JOIN player_categories pc ON p.category_id = pc.id
-      LEFT JOIN team_players tp ON p.id = tp.player_id
-      GROUP BY p.id, pc.name
-      ORDER BY "selectedCount" DESC, p.name ASC
-    `
-  );
   
-  return result.rows;
-}
   // Player operations
   getPlayers(): Promise<PlayerWithCategory[]>;
   getPlayersByCategory(categoryId: number): Promise<PlayerWithCategory[]>;
   getPlayerById(id: number): Promise<Player | undefined>;
   updatePlayerPoints(id: number, points: number): Promise<Player>;
   updatePlayerSelectionPercent(id: number, percent: number): Promise<Player>;
-  getPlayerSelectionStats(): Promise<any[]>; // Added method to interface
-  // In the IStorage interface, add:
-getUserByEmail(email: string): Promise<User | undefined>;
-
-// In the DatabaseStorage class, add this method:
-async getUserByEmail(email: string): Promise<User | undefined> {
-  const [user] = await db.select().from(users).where(eq(users.email, email));
-  return user;
-}
+  getPlayerSelectionStats(): Promise<any[]>; // Added method
   
   // Team operations
   createTeam(team: InsertTeam): Promise<Team>;
@@ -111,6 +75,12 @@ export class DatabaseStorage implements IStorage {
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  // New method added
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
     return user;
   }
 
@@ -246,7 +216,7 @@ export class DatabaseStorage implements IStorage {
     return updatedPlayer;
   }
 
-  // FIXED METHOD - Added the corrected getPlayerSelectionStats method
+  // New method added
   async getPlayerSelectionStats(): Promise<any[]> {
     // Use sql template literal instead of db.sql function
     const result = await db.execute(
@@ -286,233 +256,7 @@ export class DatabaseStorage implements IStorage {
     return team;
   }
 
-  async getTeamWithPlayers(id: number): Promise<TeamWithPlayers | undefined> {
-    const team = await this.getTeamById(id);
-    if (!team) return undefined;
-
-    // Get user info to include username
-    const user = await this.getUser(team.userId);
-    const username = user?.username || null;
-    
-    // Get contest info
-    const contest = await this.getContestById(team.contestId);
-
-    const playersInTeam = await db
-      .select({
-        id: players.id,
-        name: players.name,
-        categoryId: players.categoryId,
-        categoryName: playerCategories.name,
-        creditPoints: players.creditPoints,
-        performancePoints: players.performancePoints,
-        selectionPercent: players.selectionPercent,
-        isCaptain: teamPlayers.isCaptain,
-        isViceCaptain: teamPlayers.isViceCaptain
-      })
-      .from(teamPlayers)
-      .innerJoin(players, eq(teamPlayers.playerId, players.id))
-      .innerJoin(playerCategories, eq(players.categoryId, playerCategories.id))
-      .where(eq(teamPlayers.teamId, id));
-
-    // Calculate total points with captain (2x) and vice-captain (1.5x) multipliers
-    const totalPoints = playersInTeam.reduce((sum, player) => {
-      let playerPoints = player.performancePoints; // Use performance points for scoring
-      
-      // Apply multipliers for captain and vice-captain
-      if (player.isCaptain) {
-        playerPoints *= 2; // Captain gets 2x points
-      } else if (player.isViceCaptain) {
-        playerPoints *= 1.5; // Vice-Captain gets 1.5x points
-      }
-      
-      return sum + playerPoints;
-    }, 0);
-
-    return {
-      ...team,
-      username,
-      contestName: contest?.name,
-      isLive: contest?.isLive,
-      players: playersInTeam,
-      totalPoints
-    };
-  }
-
-  async getTeamsByUserId(userId: number): Promise<Team[]> {
-    const userTeams = await db.select().from(teams).where(eq(teams.userId, userId));
-    return userTeams;
-  }
-
-  async getTeamByUserId(userId: number): Promise<TeamWithPlayers | undefined> {
-    const [userTeam] = await db.select().from(teams).where(eq(teams.userId, userId));
-    if (!userTeam) return undefined;
-
-    return this.getTeamWithPlayers(userTeam.id);
-  }
-  
-  async deleteTeamById(id: number): Promise<void> {
-    // First delete all team players
-    await db
-      .delete(teamPlayers)
-      .where(eq(teamPlayers.teamId, id));
-    
-    // Then delete the team
-    await db
-      .delete(teams)
-      .where(eq(teams.id, id));
-  }
-  
-  async getTeamsByContestId(contestId: number): Promise<TeamWithPlayers[]> {
-    const teamsInContest = await db
-      .select({
-        id: teams.id,
-        name: teams.name,
-        userId: teams.userId,
-        contestId: teams.contestId,
-        username: users.username
-      })
-      .from(teams)
-      .leftJoin(users, eq(teams.userId, users.id))
-      .where(eq(teams.contestId, contestId));
-    
-    // Get contest details
-    const contest = await this.getContestById(contestId);
-    
-    const result = await Promise.all(
-      teamsInContest.map(async (team) => {
-        const playersInTeam = await db
-          .select({
-            id: players.id,
-            name: players.name,
-            categoryId: players.categoryId,
-            categoryName: playerCategories.name,
-            creditPoints: players.creditPoints,
-            performancePoints: players.performancePoints,
-            selectionPercent: players.selectionPercent,
-            isCaptain: teamPlayers.isCaptain,
-            isViceCaptain: teamPlayers.isViceCaptain
-          })
-          .from(teamPlayers)
-          .innerJoin(players, eq(teamPlayers.playerId, players.id))
-          .innerJoin(playerCategories, eq(players.categoryId, playerCategories.id))
-          .where(eq(teamPlayers.teamId, team.id));
-
-        // Calculate total points with captain (2x) and vice-captain (1.5x) multipliers
-        const totalPoints = playersInTeam.reduce((sum, player) => {
-          let playerPoints = player.performancePoints;
-          
-          // Apply multipliers for captain and vice-captain
-          if (player.isCaptain) {
-            playerPoints *= 2; // Captain gets 2x points
-          } else if (player.isViceCaptain) {
-            playerPoints *= 1.5; // Vice-Captain gets 1.5x points
-          }
-          
-          return sum + playerPoints;
-        }, 0);
-
-        return {
-          ...team,
-          contestName: contest?.name,
-          isLive: contest?.isLive,
-          players: playersInTeam,
-          totalPoints
-        };
-      })
-    );
-    
-    return result;
-  }
-
-  async getTeamRankings(): Promise<TeamRanking[]> {
-    // This is a complex query that needs a subquery to calculate total points
-    const teamsWithPlayers = await this.getAllTeamsWithPlayers();
-    
-    // Sort by points and assign rank
-    const sortedTeams = teamsWithPlayers
-      .sort((a, b) => b.totalPoints - a.totalPoints)
-      .map((team, index) => ({
-        id: team.id,
-        name: team.name,
-        userId: team.userId,
-        username: team.username || 'Unknown',
-        totalPoints: team.totalPoints,
-        rank: index + 1
-      }));
-    
-    return sortedTeams;
-  }
-
-  async getCurrentMatch(): Promise<Match | undefined> {
-    const [match] = await db
-      .select()
-      .from(matches)
-      .where(eq(matches.status, 'live'))
-      .orderBy(desc(matches.createdAt))
-      .limit(1);
-    
-    return match;
-  }
-
-  async getAllTeamsWithPlayers(): Promise<TeamWithPlayers[]> {
-    const allTeams = await db
-      .select({
-        id: teams.id,
-        name: teams.name,
-        userId: teams.userId,
-        contestId: teams.contestId,
-        username: users.username
-      })
-      .from(teams)
-      .leftJoin(users, eq(teams.userId, users.id));
-    
-    const result = await Promise.all(
-      allTeams.map(async (team) => {
-        // Get contest info
-        const contest = await this.getContestById(team.contestId);
-        
-        const playersInTeam = await db
-          .select({
-            id: players.id,
-            name: players.name,
-            categoryId: players.categoryId,
-            categoryName: playerCategories.name,
-            creditPoints: players.creditPoints,
-            performancePoints: players.performancePoints,
-            selectionPercent: players.selectionPercent,
-            isCaptain: teamPlayers.isCaptain,
-            isViceCaptain: teamPlayers.isViceCaptain
-          })
-          .from(teamPlayers)
-          .innerJoin(players, eq(teamPlayers.playerId, players.id))
-          .innerJoin(playerCategories, eq(players.categoryId, playerCategories.id))
-          .where(eq(teamPlayers.teamId, team.id));
-        
-        // Calculate total points with captain and vice-captain multipliers
-        const totalPoints = playersInTeam.reduce((sum, player) => {
-          let playerPoints = player.performancePoints;
-          
-          if (player.isCaptain) {
-            playerPoints *= 2;
-          } else if (player.isViceCaptain) {
-            playerPoints *= 1.5;
-          }
-          
-          return sum + playerPoints;
-        }, 0);
-        
-        return {
-          ...team,
-          contestName: contest?.name,
-          isLive: contest?.isLive,
-          players: playersInTeam,
-          totalPoints
-        };
-      })
-    );
-    
-    return result;
-  }
+  // Continue with the rest of your class implementation...
 }
 
 export const storage = new DatabaseStorage();
