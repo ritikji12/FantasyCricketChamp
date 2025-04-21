@@ -1,12 +1,17 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { z } from "zod";
-import { insertTeamSchema, insertTeamPlayerSchema } from "@shared/schema";
+import { 
+  insertTeamSchema, insertTeamPlayerSchema, playerCategories, players,
+  createTeamWithPlayersSchema, updatePlayerPointsSchema, insertContestSchema,
+  insertMatchSchema, matches, users
+} from "@shared/schema";
 import { db } from "./db";
 import { scrypt, randomBytes } from "crypto";
 import { promisify } from "util";
+import { eq } from "drizzle-orm";
 
 const scryptAsync = promisify(scrypt);
 
@@ -18,7 +23,7 @@ async function hashPassword(password: string) {
 }
 
 // Check if user is authenticated
-function isAuthenticated(req: Request, res: Response, next: Function) {
+function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated()) {
     return next();
   }
@@ -26,7 +31,7 @@ function isAuthenticated(req: Request, res: Response, next: Function) {
 }
 
 // Check if user is admin
-function isAdmin(req: Request, res: Response, next: Function) {
+function isAdmin(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated() && req.user?.isAdmin) {
     return next();
   }
@@ -38,116 +43,203 @@ export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
 
   // Initialize database with player categories and players if they don't exist
- // Fix for the initializeDatabase function in routes.ts
-
-async function initializeDatabase() {
-  try {
-    // Check if admin user exists
-    const adminUser = await storage.getUserByUsername("admin");
-    if (!adminUser) {
-      // Create admin user with fixed credentials
-      await storage.createUser({
-        username: "admin",
-        password: await hashPassword("ritik123"),
-        isAdmin: true
-      });
-      console.log("Admin user created with username: admin, password: ritik123");
-    }
-
-    // Initialize player categories if they don't exist
-    const categories = await storage.getPlayerCategories();
-    if (categories.length === 0) {
-      console.log("Creating player categories...");
-      // Use db.insert with values instead of direct SQL
-      await db.insert(playerCategories).values([
-        { name: "All-Rounder" },
-        { name: "Batsman" },
-        { name: "Bowler" },
-        { name: "Wicketkeeper" }
-      ]);
-      console.log("Player categories created");
-    }
-
-    // Initialize players if they don't exist
-    const allPlayers = await storage.getPlayers();
-    if (allPlayers.length === 0) {
-      console.log("Creating players...");
-
-      // Get category IDs
-      const categoriesAfterInsert = await storage.getPlayerCategories();
-      const categoryMap = new Map();
-      categoriesAfterInsert.forEach(category => {
-        categoryMap.set(category.name, category.id);
-      });
-
-      const allRounderId = categoryMap.get("All-Rounder");
-      const batsmanId = categoryMap.get("Batsman");
-      const bowlerId = categoryMap.get("Bowler");
-      const wicketkeeperId = categoryMap.get("Wicketkeeper");
-
-      // Add players properly using the ORM instead of raw SQL
-      await db.insert(players).values([
-        { name: "Ankur", categoryId: allRounderId, creditPoints: 200, performancePoints: 0, selectionPercent: 35 },
-        { name: "Prince", categoryId: allRounderId, creditPoints: 150, performancePoints: 0, selectionPercent: 28 },
-        { name: "Mayank", categoryId: allRounderId, creditPoints: 140, performancePoints: 0, selectionPercent: 25 },
-        { name: "Amit", categoryId: allRounderId, creditPoints: 150, performancePoints: 0, selectionPercent: 30 }
-      ]);
-
-      await db.insert(players).values([
-        { name: "Kuki", categoryId: batsmanId, creditPoints: 160, performancePoints: 0, selectionPercent: 40 },
-        { name: "Captain", categoryId: batsmanId, creditPoints: 90, performancePoints: 0, selectionPercent: 15 },
-        { name: "Chintu", categoryId: batsmanId, creditPoints: 110, performancePoints: 0, selectionPercent: 20 },
-        { name: "Paras Kumar", categoryId: batsmanId, creditPoints: 90, performancePoints: 0, selectionPercent: 18 },
-        { name: "Pushkar", categoryId: batsmanId, creditPoints: 100, performancePoints: 0, selectionPercent: 22 },
-        { name: "Dhilu", categoryId: batsmanId, creditPoints: 55, performancePoints: 0, selectionPercent: 10 },
-        { name: "Kamal", categoryId: batsmanId, creditPoints: 110, performancePoints: 0, selectionPercent: 25 },
-        { name: "Ajay", categoryId: batsmanId, creditPoints: 35, performancePoints: 0, selectionPercent: 5 }
-      ]);
-
-      await db.insert(players).values([
-        { name: "Pulkit", categoryId: bowlerId, creditPoints: 55, performancePoints: 0, selectionPercent: 15 },
-        { name: "Nitish", categoryId: bowlerId, creditPoints: 110, performancePoints: 0, selectionPercent: 30 },
-        { name: "Rahul", categoryId: bowlerId, creditPoints: 110, performancePoints: 0, selectionPercent: 30 },
-        { name: "Karambeer", categoryId: bowlerId, creditPoints: 95, performancePoints: 0, selectionPercent: 25 },
-        { name: "Manga", categoryId: bowlerId, creditPoints: 90, performancePoints: 0, selectionPercent: 20 }
-      ]);
-
-      await db.insert(players).values([
-        { name: "None", categoryId: wicketkeeperId, creditPoints: 0, performancePoints: 0, selectionPercent: 0 }
-      ]);
-
-      console.log("Players created successfully");
-    }
-  } catch (error) {
-    console.error("Failed to initialize database:", error);
-    throw error;
-  }
-}
-
-  // Contest routes
-
-  // Get all contests
-  // Create a new match (admin only)
-  app.post("/api/matches", isAuthenticated, isAdmin, async (req, res) => {
+  async function initializeDatabase() {
     try {
-      const { team1, team2 } = req.body;
-      
-      if (!team1 || !team2) {
-        return res.status(400).json({ message: "Both teams are required" });
+      // Check if admin user exists
+      const adminUser = await storage.getUserByUsername("admin");
+      if (!adminUser) {
+        // Create admin user with fixed credentials
+        await storage.createUser({
+          username: "admin",
+          password: await hashPassword("admin123"),
+          isAdmin: true
+        });
+        console.log("Admin user created with username: admin, password: admin123");
       }
 
-      const [match] = await db.insert(matches).values({
-        team1,
-        team2,
-        status: 'live'
-      }).returning();
+      // Initialize player categories if they don't exist
+      const categories = await storage.getPlayerCategories();
+      if (categories.length === 0) {
+        console.log("Creating player categories...");
+        // Use db.insert with values instead of direct SQL
+        await db.insert(playerCategories).values([
+          { name: "All Rounder" },
+          { name: "Batsman" },
+          { name: "Bowler" },
+          { name: "Wicketkeeper" }
+        ]);
+        console.log("Player categories created");
+      }
 
-      res.status(201).json(match);
+      // Initialize players if they don't exist
+      const allPlayers = await storage.getPlayers();
+      if (allPlayers.length === 0) {
+        console.log("Creating players...");
+
+        // Get category IDs
+        const categoriesAfterInsert = await storage.getPlayerCategories();
+        const categoryMap = new Map();
+        categoriesAfterInsert.forEach(category => {
+          categoryMap.set(category.name, category.id);
+        });
+
+        const allRounderId = categoryMap.get("All Rounder");
+        const batsmanId = categoryMap.get("Batsman");
+        const bowlerId = categoryMap.get("Bowler");
+        const wicketkeeperId = categoryMap.get("Wicketkeeper");
+
+        // Add players properly using the ORM instead of raw SQL
+        await db.insert(players).values([
+          { name: "Ankur", categoryId: allRounderId, creditPoints: 200, performancePoints: 0, selectionPercent: 35 },
+          { name: "Prince", categoryId: allRounderId, creditPoints: 150, performancePoints: 0, selectionPercent: 28 },
+          { name: "Mayank", categoryId: allRounderId, creditPoints: 140, performancePoints: 0, selectionPercent: 25 },
+          { name: "Amit", categoryId: allRounderId, creditPoints: 150, performancePoints: 0, selectionPercent: 30 }
+        ]);
+
+        await db.insert(players).values([
+          { name: "Kuki", categoryId: batsmanId, creditPoints: 160, performancePoints: 0, selectionPercent: 40 },
+          { name: "Captain", categoryId: batsmanId, creditPoints: 90, performancePoints: 0, selectionPercent: 15 },
+          { name: "Chintu", categoryId: batsmanId, creditPoints: 110, performancePoints: 0, selectionPercent: 20 },
+          { name: "Paras Kumar", categoryId: batsmanId, creditPoints: 90, performancePoints: 0, selectionPercent: 18 },
+          { name: "Pushkar", categoryId: batsmanId, creditPoints: 100, performancePoints: 0, selectionPercent: 22 },
+          { name: "Dhilu", categoryId: batsmanId, creditPoints: 55, performancePoints: 0, selectionPercent: 10 },
+          { name: "Kamal", categoryId: batsmanId, creditPoints: 110, performancePoints: 0, selectionPercent: 25 },
+          { name: "Ajay", categoryId: batsmanId, creditPoints: 35, performancePoints: 0, selectionPercent: 5 }
+        ]);
+
+        await db.insert(players).values([
+          { name: "Pulkit", categoryId: bowlerId, creditPoints: 55, performancePoints: 0, selectionPercent: 15 },
+          { name: "Nitish", categoryId: bowlerId, creditPoints: 110, performancePoints: 0, selectionPercent: 30 },
+          { name: "Rahul", categoryId: bowlerId, creditPoints: 110, performancePoints: 0, selectionPercent: 30 },
+          { name: "Karambeer", categoryId: bowlerId, creditPoints: 95, performancePoints: 0, selectionPercent: 25 },
+          { name: "Manga", categoryId: bowlerId, creditPoints: 90, performancePoints: 0, selectionPercent: 20 }
+        ]);
+
+        await db.insert(players).values([
+          { name: "None", categoryId: wicketkeeperId, creditPoints: 0, performancePoints: 0, selectionPercent: 0 }
+        ]);
+
+        console.log("Players created successfully");
+      }
     } catch (error) {
-      res.status(500).json({ message: "Failed to create match" });
+      console.error("Failed to initialize database:", error);
+      throw error;
+    }
+  }
+
+  // Run database initialization
+  await initializeDatabase();
+
+  // Get player categories
+  app.get("/api/players/categories", async (req, res) => {
+    try {
+      const categories = await storage.getPlayerCategories();
+      res.json(categories);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to retrieve player categories" });
     }
   });
 
+  // Match routes
+  // Get all matches
+  app.get("/api/matches", async (req, res) => {
+    try {
+      const matches = await storage.getMatches();
+      res.json(matches);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to retrieve matches" });
+    }
+  });
+  
+  // Get live matches or create default one if none exists
+  app.get("/api/matches/live", async (req, res) => {
+    try {
+      // Get all matches
+      const allMatches = await storage.getMatches();
+      
+      // Filter for live matches
+      const liveMatches = allMatches.filter(match => match.status === 'live');
+      
+      // If no live matches, create a default one
+      if (liveMatches.length === 0) {
+        // Check if we already have the default match
+        const defaultMatch = allMatches.find(
+          match => match.team1 === 'Destroyer' && match.team2 === 'Dominator'
+        );
+        
+        if (defaultMatch) {
+          // Update the existing match to live status
+          const updatedMatch = await storage.updateMatchStatus(defaultMatch.id, 'live');
+          return res.json([updatedMatch]);
+        } else {
+          // Create a new default match
+          const newMatch = await storage.createMatch({
+            team1: 'Destroyer',
+            team2: 'Dominator',
+            status: 'live',
+            venue: 'Fantasy Stadium'
+          });
+          return res.json([newMatch]);
+        }
+      }
+      
+      res.json(liveMatches);
+    } catch (error) {
+      console.error("Error fetching live matches:", error);
+      res.status(500).json({ message: "Failed to retrieve live matches" });
+    }
+  });
+
+  // Get match by ID
+  app.get("/api/matches/:id", async (req, res) => {
+    try {
+      const matchId = parseInt(req.params.id);
+      const match = await storage.getMatchById(matchId);
+
+      if (!match) {
+        return res.status(404).json({ message: "Match not found" });
+      }
+
+      res.json(match);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to retrieve match" });
+    }
+  });
+
+  // Create a new match (admin only)
+  app.post("/api/matches", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const matchData = insertMatchSchema.parse(req.body);
+      const newMatch = await storage.createMatch(matchData);
+      res.status(201).json(newMatch);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Invalid match data", errors: error.errors });
+      } else {
+        res.status(500).json({ message: "Failed to create match" });
+      }
+    }
+  });
+
+  // Update match status (admin only)
+  app.patch("/api/matches/:id/status", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const matchId = parseInt(req.params.id);
+      const { status } = req.body;
+
+      if (typeof status !== 'string' || !['live', 'completed', 'upcoming'].includes(status)) {
+        return res.status(400).json({ message: "Invalid status value" });
+      }
+
+      const updatedMatch = await storage.updateMatchStatus(matchId, status);
+      res.json(updatedMatch);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update match status" });
+    }
+  });
+
+  // Contest routes
+  // Get all contests
   app.get("/api/contests", async (req, res) => {
     try {
       const contests = await storage.getContests();
@@ -176,11 +268,15 @@ async function initializeDatabase() {
   // Create a new contest (admin only)
   app.post("/api/contests", isAuthenticated, isAdmin, async (req, res) => {
     try {
-      const contestData = req.body;
+      const contestData = insertContestSchema.parse(req.body);
       const newContest = await storage.createContest(contestData);
       res.status(201).json(newContest);
     } catch (error) {
-      res.status(500).json({ message: "Failed to create contest" });
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Invalid contest data", errors: error.errors });
+      } else {
+        res.status(500).json({ message: "Failed to create contest" });
+      }
     }
   });
 
@@ -231,7 +327,7 @@ async function initializeDatabase() {
       const players = await storage.getPlayers();
       res.json(players);
     } catch (error) {
-      res.status(500).json({ message: "Failed to retrieve players" });
+      res.status(500).json({ message: "Error fetching players" });
     }
   });
 
@@ -247,19 +343,29 @@ async function initializeDatabase() {
   });
 
   // Update player points (admin only)
-  app.put("/api/players/:id", isAdmin, async (req, res) => {
+  app.put("/api/players/:id", isAuthenticated, isAdmin, async (req, res) => {
     try {
       const playerId = parseInt(req.params.id);
-      const { points } = req.body;
-
-      if (typeof points !== 'number') {
-        return res.status(400).json({ message: "Points must be a number" });
-      }
+      const { points } = updatePlayerPointsSchema.parse(req.body);
 
       const updatedPlayer = await storage.updatePlayerPoints(playerId, points);
       res.json(updatedPlayer);
     } catch (error) {
-      res.status(500).json({ message: "Failed to update player points" });
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Invalid points data", errors: error.errors });
+      } else {
+        res.status(500).json({ message: "Failed to update player points" });
+      }
+    }
+  });
+
+  // Get player selection stats (using existing logic)
+  app.get("/api/players/stats/selection", async (req, res) => {
+    try {
+      const stats = await storage.getPlayerSelectionStats();
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to retrieve player selection stats" });
     }
   });
 
@@ -267,39 +373,51 @@ async function initializeDatabase() {
   app.post("/api/teams", isAuthenticated, async (req, res) => {
     try {
       const userId = req.user!.id;
+      const { name, contestId, playerIds, captain, viceCaptain } = createTeamWithPlayersSchema.parse(req.body);
 
-      // Check if user already has a team
-      const existingTeam = await storage.getTeamByUserId(userId);
-      if (existingTeam) {
-        return res.status(400).json({ message: "You already have a team" });
+      // Check if user already has a team for this contest
+      const userTeams = await storage.getTeamsByUserId(userId);
+      const existingTeamForContest = userTeams.find(team => team.contestId === contestId);
+      
+      if (existingTeamForContest) {
+        return res.status(400).json({ message: "You already have a team for this contest" });
       }
 
-      const teamData = insertTeamSchema.parse({
-        ...req.body,
-        userId
+      // Create the team
+      const team = await storage.createTeam({
+        name,
+        userId,
+        contestId
       });
 
-      const team = await storage.createTeam(teamData);
-
+      // Calculate credit points used
+      let totalCreditPoints = 0;
+      
       // Add players to team
-      const { playerIds, captain, viceCaptain } = req.body;
-      if (Array.isArray(playerIds)) {
-        for (const playerId of playerIds) {
-          await storage.addPlayerToTeam({
-            teamId: team.id,
-            playerId,
-            isCaptain: playerId === captain,
-            isViceCaptain: playerId === viceCaptain
-          });
+      for (const playerId of playerIds) {
+        const player = await storage.getPlayerById(playerId);
+        if (!player) {
+          continue;
         }
+        
+        totalCreditPoints += player.creditPoints;
+        
+        await storage.addPlayerToTeam({
+          teamId: team.id,
+          playerId,
+          playerCreditPoints: player.creditPoints,
+          isCaptain: playerId === captain,
+          isViceCaptain: playerId === viceCaptain
+        });
       }
 
-      // Add fixed "None" wicketkeeper
+      // Add fixed "None" wicketkeeper if not already selected
       const wicketkeepers = await storage.getPlayersByCategory(4); // Assuming 4 is wicketkeeper category
-      if (wicketkeepers.length > 0) {
+      if (wicketkeepers.length > 0 && !playerIds.includes(wicketkeepers[0].id)) {
         await storage.addPlayerToTeam({
           teamId: team.id,
           playerId: wicketkeepers[0].id,
+          playerCreditPoints: 0,
           isCaptain: false,
           isViceCaptain: false
         });
@@ -312,6 +430,7 @@ async function initializeDatabase() {
       if (error instanceof z.ZodError) {
         res.status(400).json({ message: "Invalid team data", errors: error.errors });
       } else {
+        console.error("Error creating team:", error);
         res.status(500).json({ message: "Failed to create team" });
       }
     }
@@ -324,7 +443,7 @@ async function initializeDatabase() {
       const team = await storage.getTeamByUserId(userId);
 
       if (!team) {
-        return res.status(404).json({ message: "You don't have a team yet" });
+        return res.status(404).json({ message: "No team" });
       }
 
       res.json(team);
@@ -344,7 +463,7 @@ async function initializeDatabase() {
   });
 
   // Get all teams with players (admin only)
-  app.get("/api/teams", isAdmin, async (req, res) => {
+  app.get("/api/teams", isAuthenticated, isAdmin, async (req, res) => {
     try {
       const teams = await storage.getAllTeamsWithPlayers();
       res.json(teams);
@@ -353,21 +472,43 @@ async function initializeDatabase() {
     }
   });
 
-  // Get teams by contest ID (admin only)
-  app.get("/api/contests/:id/teams", isAuthenticated, isAdmin, async (req, res) => {
+  // Get teams by contest ID
+  app.get("/api/contests/:id/teams", isAuthenticated, async (req, res) => {
     try {
       const contestId = parseInt(req.params.id);
+      const isUserAdmin = req.user?.isAdmin === true;
+      
+      // Get the teams in the contest
       const teams = await storage.getTeamsByContestId(contestId);
+      
+      // If user is not admin, only return their team
+      if (!isUserAdmin) {
+        const userTeam = teams.find(team => team.userId === req.user!.id);
+        return res.json(userTeam ? [userTeam] : []);
+      }
+      
+      // Admin gets all teams
       res.json(teams);
     } catch (error) {
-      res.status(500).json({ message: "Failed to retrieve teams for contest" });
+      res.status(500).json({ message: "Failed to retrieve teams" });
     }
   });
 
-  // Delete a team (admin only)
-  app.delete("/api/teams/:id", isAuthenticated, isAdmin, async (req, res) => {
+  // Delete a team (owner or admin)
+  app.delete("/api/teams/:id", isAuthenticated, async (req, res) => {
     try {
       const teamId = parseInt(req.params.id);
+      const team = await storage.getTeamById(teamId);
+      
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+      
+      // Check if user is authorized (team owner or admin)
+      if (team.userId !== req.user!.id && !req.user!.isAdmin) {
+        return res.status(403).json({ message: "Not authorized to delete this team" });
+      }
+      
       await storage.deleteTeamById(teamId);
       res.status(204).send();
     } catch (error) {
@@ -375,125 +516,35 @@ async function initializeDatabase() {
     }
   });
 
-  // Get team by id
-  app.get("/api/teams/:id", isAuthenticated, async (req, res) => {
+  // API endpoint to get database debug info
+  app.get("/api/debug/database", isAuthenticated, isAdmin, async (req, res) => {
     try {
-      const teamId = parseInt(req.params.id);
-      const team = await storage.getTeamWithPlayers(teamId);
-
-      if (!team) {
-        return res.status(404).json({ message: "Team not found" });
-      }
-
-      res.json(team);
+      // Get counts from tables
+      const playerCount = await db.select().from(players).execute();
+      const categoryCount = await db.select().from(playerCategories).execute();
+      const matchCount = await db.select().from(matches).execute();
+      
+      res.json({
+        status: "Database is healthy",
+        recordCounts: {
+          players: playerCount.length,
+          categories: categoryCount.length,
+          matches: matchCount.length
+        },
+        environment: {
+          nodeEnv: process.env.NODE_ENV,
+          dbConnected: true
+        }
+      });
     } catch (error) {
-      res.status(500).json({ message: "Failed to retrieve team" });
+      console.error("Database debug error:", error);
+      res.status(500).json({ 
+        status: "Database error",
+        error: String(error),
+      });
     }
   });
 
   const httpServer = createServer(app);
   return httpServer;
-}
-
-// Helper function to initialize database with admin user and initial data
-async function initializeDatabase() {
-  try {
-    // Check if admin user exists
-    const adminUser = await storage.getUserByUsername("admin");
-    if (!adminUser) {
-      // Create admin user with fixed credentials
-      await storage.createUser({
-        username: "admin",
-        password: await hashPassword("ritik123"),
-        isAdmin: true
-      });
-      console.log("Admin user created with username: admin, password: ritik123");
-    }
-
-    // Initialize player categories if they don't exist
-    const playerCategories = await db.select().from("playerCategories");
-    if (playerCategories.length === 0) {
-      console.log("Creating player categories...");
-      await db.insert("playerCategories").values([
-        { name: "All-Rounder" },
-        { name: "Batsman" },
-        { name: "Bowler" },
-        { name: "Wicketkeeper" }
-      ]);
-      console.log("Player categories created");
-    }
-
-    // Initialize players if they don't exist
-    const players = await db.select().from("players");
-    if (players.length === 0) {
-      console.log("Creating players...");
-
-      // Get category IDs
-      const categories = await db.select().from(playerCategories);
-      const categoryMap = new Map();
-      categories.forEach(category => {
-        categoryMap.set(category.name, category.id);
-      });
-
-      const allRounderId = categoryMap.get("All-Rounder");
-      const batsmanId = categoryMap.get("Batsman");
-      const bowlerId = categoryMap.get("Bowler");
-      const wicketkeeperId = categoryMap.get("Wicketkeeper");
-
-      // Add All-Rounders
-      await db.insert("players").values([
-        { name: "Ankur", categoryId: allRounderId, creditPoints: 200, performancePoints: 0, selectionPercent: 35 },
-        { name: "Prince", categoryId: allRounderId, creditPoints: 150, performancePoints: 0, selectionPercent: 28 },
-        { name: "Mayank", categoryId: allRounderId, creditPoints: 140, performancePoints: 0, selectionPercent: 25 },
-        { name: "Amit", categoryId: allRounderId, creditPoints: 150, performancePoints: 0, selectionPercent: 30 }
-      ]);
-
-      // Add Batsmen
-      await db.insert("players").values([
-        { name: "Kuki", categoryId: batsmanId, creditPoints: 160, performancePoints: 0, selectionPercent: 40 },
-        { name: "Captain", categoryId: batsmanId, creditPoints: 90, performancePoints: 0, selectionPercent: 15 },
-        { name: "Chintu", categoryId: batsmanId, creditPoints: 110, performancePoints: 0, selectionPercent: 20 },
-        { name: "Paras Kumar", categoryId: batsmanId, creditPoints: 90, performancePoints: 0, selectionPercent: 18 },
-        { name: "Pushkar", categoryId: batsmanId, creditPoints: 100, performancePoints: 0, selectionPercent: 22 },
-        { name: "Dhilu", categoryId: batsmanId, creditPoints: 55, performancePoints: 0, selectionPercent: 10 },
-        { name: "Kamal", categoryId: batsmanId, creditPoints: 110, performancePoints: 0, selectionPercent: 25 },
-        { name: "Ajay", categoryId: batsmanId, creditPoints: 35, performancePoints: 0, selectionPercent: 5 }
-      ]);
-
-      // Add Bowlers
-      await db.insert("players").values([
-        { name: "Pulkit", categoryId: bowlerId, creditPoints: 55, performancePoints: 0, selectionPercent: 15 },
-        { name: "Nitish", categoryId: bowlerId, creditPoints: 110, performancePoints: 0, selectionPercent: 30 },
-        { name: "Rahul", categoryId: bowlerId, creditPoints: 110, performancePoints: 0, selectionPercent: 32 },
-        { name: "Karambeer", categoryId: bowlerId, creditPoints: 95, performancePoints: 0, selectionPercent: 28 },
-        { name: "Manga", categoryId: bowlerId, creditPoints: 90, performancePoints: 0, selectionPercent: 25 }
-      ]);
-
-      // Add "None" wicketkeeper
-      await db.insert("players").values([
-        { name: "None", categoryId: wicketkeeperId, creditPoints: 0, performancePoints: 0, selectionPercent: 100 }
-      ]);
-
-      console.log("Players created");
-    }
-
-    // Create a default contest if none exists
-    const contests = await db.select().from("contests");
-    if (contests.length === 0) {
-      console.log("Creating default contest...");
-      await db.insert("contests").values({
-        name: "Dominator vs Destroyer Match",
-        description: "Team Dominator takes on Team Destroyer in this exciting match!",
-        rules: "1. Select 8 players within the 1000 credit limit.\n2. Include at least 2 bowlers.\n3. Assign a Captain (2x points) and Vice-Captain (1.5x points).",
-        prizePool: 10000,
-        entryFee: 100,
-        maxEntries: 200,
-        isLive: false
-      });
-      console.log("Default contest created");
-    }
-
-  } catch (error) {
-    console.error("Failed to initialize database:", error);
-  }
 }
