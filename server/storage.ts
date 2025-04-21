@@ -36,6 +36,14 @@ export interface IStorage {
   updatePlayerPoints(id: number, points: number): Promise<Player>;
   updatePlayerSelectionPercent(id: number, percent: number): Promise<Player>;
   getPlayerSelectionStats(): Promise<any[]>; // Added method to interface
+  // In the IStorage interface, add:
+getUserByEmail(email: string): Promise<User | undefined>;
+
+// In the DatabaseStorage class, add this method:
+async getUserByEmail(email: string): Promise<User | undefined> {
+  const [user] = await db.select().from(users).where(eq(users.email, email));
+  return user;
+}
   
   // Team operations
   createTeam(team: InsertTeam): Promise<Team>;
