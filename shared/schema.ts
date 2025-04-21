@@ -80,7 +80,23 @@ export const insertPlayerSchema = createInsertSchema(players).pick({
   performancePoints: true,
   selectionPercent: true,
 });
+// Matches Table
+export const matches = pgTable("matches", {
+  id: serial("id").primaryKey(),
+  team1: text("team1").notNull(),
+  team2: text("team2").notNull(),
+  status: text("status").default("live").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
+export const insertMatchSchema = createInsertSchema(matches).pick({
+  team1: true,
+  team2: true,
+  status: true,
+});
+
+export type Match = typeof matches.$inferSelect;
+export type InsertMatch = z.infer<typeof insertMatchSchema>;
 // Teams Table
 export const teams = pgTable("teams", {
   id: serial("id").primaryKey(),
