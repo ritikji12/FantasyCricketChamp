@@ -35,7 +35,7 @@ export interface IStorage {
   getPlayersByCategory(categoryId: number): Promise<PlayerWithCategory[]>;
   getPlayerById(id: number): Promise<Player | undefined>;
   updatePlayerPoints(id: number, points: number): Promise<Player>;
-  creditPoints: players.creditPoints, 
+  updatePlayerCreditPoints(id: number, credit: number): Promise<Player>; 
   updatePlayerSelectionPercent(id: number, percent: number): Promise<Player>;
   getPlayerSelectionStats(): Promise<any[]>; // Added method
   
