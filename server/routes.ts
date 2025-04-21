@@ -206,18 +206,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create a new match (admin only)
+  // Create a new match (admin only) - Fixed for doctype error
   app.post("/api/matches", isAuthenticated, isAdmin, async (req, res) => {
     try {
-      const matchData = insertMatchSchema.parse(req.body);
-      const newMatch = await storage.createMatch(matchData);
-      res.status(201).json(newMatch);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ message: "Invalid match data", errors: error.errors });
-      } else {
-        res.status(500).json({ message: "Failed to create match" });
+      // Make sure the content type is properly set
+      res.setHeader('Content-Type', 'application/json');
+      
+      // Validate and parse the incoming data
+      const matchData = req.body;
+      
+      // Basic validation
+      if (!matchData.team1 || !matchData.team2) {
+        return res.status(400).json({ 
+          message: "Invalid match data", 
+          errors: "Both team1 and team2 are required" 
+        });
       }
+      
+      // Set default values if not provided
+      const processedMatchData = {
+        team1: matchData.team1,
+        team2: matchData.team2,
+        status: matchData.status || 'upcoming',
+        venue: matchData.venue || 'Default Stadium'
+      };
+      
+      // Create the match using storage
+      const newMatch = await storage.createMatch(processedMatchData);
+      
+      // Return JSON response
+      return res.status(201).json(newMatch);
+    } catch (error) {
+      console.error("Error creating match:", error);
+      return res.status(500).json({ 
+        message: "Failed to create match", 
+        error: String(error)
+      });
     }
   });
 
@@ -268,15 +292,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create a new contest (admin only)
   app.post("/api/contests", isAuthenticated, isAdmin, async (req, res) => {
     try {
-      const contestData = insertContestSchema.parse(req.body);
-      const newContest = await storage.createContest(contestData);
-      res.status(201).json(newContest);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ message: "Invalid contest data", errors: error.errors });
-      } else {
-        res.status(500).json({ message: "Failed to create contest" });
+      // Set content type header
+      res.setHeader('Content-Type', 'application/json');
+      
+      const contestData = req.body;
+      
+      // Basic validation
+      if (!contestData.name) {
+        return res.status(400).json({ message: "Contest name is required" });
       }
+      
+      const newContest = await storage.createContest(contestData);
+      return res.status(201).json(newContest);
+    } catch (error) {
+      console.error("Error creating contest:", error);
+      return res.status(500).json({ 
+        message: "Failed to create contest",
+        error: String(error)
+      });
     }
   });
 
@@ -342,20 +375,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update player points (admin only)
+  // Update player performance points (admin only) - This updates performance points only, not credit points
   app.put("/api/players/:id", isAuthenticated, isAdmin, async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
+      
       const playerId = parseInt(req.params.id);
-      const { points } = updatePlayerPointsSchema.parse(req.body);
+      const { points } = req.body;
+
+      if (typeof points !== 'number') {
+        return res.status(400).json({ message: "Points must be a number" });
+      }
 
       const updatedPlayer = await storage.updatePlayerPoints(playerId, points);
-      res.json(updatedPlayer);
+      return res.json(updatedPlayer);
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ message: "Invalid points data", errors: error.errors });
-      } else {
-        res.status(500).json({ message: "Failed to update player points" });
-      }
+      console.error("Error updating player points:", error);
+      return res.status(500).json({ 
+        message: "Failed to update player points",
+        error: String(error)
+      });
     }
   });
 
@@ -372,8 +411,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create a team
   app.post("/api/teams", isAuthenticated, async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
+      
       const userId = req.user!.id;
-      const { name, contestId, playerIds, captain, viceCaptain } = createTeamWithPlayersSchema.parse(req.body);
+      const { name, contestId, playerIds, captain, viceCaptain } = req.body;
+      
+      // Basic validation
+      if (!name || !contestId || !playerIds || !Array.isArray(playerIds) || !captain || !viceCaptain) {
+        return res.status(400).json({
+          message: "Invalid team data",
+          errors: "Name, contestId, playerIds array, captain, and viceCaptain are required"
+        });
+      }
 
       // Check if user already has a team for this contest
       const userTeams = await storage.getTeamsByUserId(userId);
@@ -425,14 +474,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get complete team with players
       const teamWithPlayers = await storage.getTeamWithPlayers(team.id);
-      res.status(201).json(teamWithPlayers);
+      return res.status(201).json(teamWithPlayers);
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ message: "Invalid team data", errors: error.errors });
-      } else {
-        console.error("Error creating team:", error);
-        res.status(500).json({ message: "Failed to create team" });
-      }
+      console.error("Error creating team:", error);
+      return res.status(500).json({ 
+        message: "Failed to create team",
+        error: String(error)
+      });
     }
   });
 
@@ -452,10 +500,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get team rankings
+  // Get team rankings - users see their rankings here based on performance points
   app.get("/api/teams/rankings", async (req, res) => {
     try {
       const rankings = await storage.getTeamRankings();
+      // Rankings are based on performance points, not credit points
       res.json(rankings);
     } catch (error) {
       res.status(500).json({ message: "Failed to retrieve team rankings" });
