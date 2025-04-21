@@ -24,6 +24,20 @@ pool
   .connect()
   .then(() => console.log('✅ Connected to Postgres'))
   .catch((err) => console.error('❌ Postgres connection error:', err));
+async function addSelectionPercentColumn() {
+  try {
+    await pool.query(`
+      ALTER TABLE players 
+      ADD COLUMN selection_percent INTEGER DEFAULT 0 NOT NULL
+    `);
+    console.log("Added selection_percent column to players table");
+  } catch (error) {
+    console.error("Error adding column:", error);
+  }
+}
+
+// Call this function to add the column
+addSelectionPercentColumn();
 
 async function testQuery() {
   try {
