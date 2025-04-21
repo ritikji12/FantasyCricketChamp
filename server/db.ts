@@ -25,11 +25,10 @@ pool
   .then(() => console.log('✅ Connected to Postgres'))
   .catch((err) => console.error('❌ Postgres connection error:', err));
 
-// Sample query function to test the connection
 async function testQuery() {
   try {
-    // Adjust this query to your schema
-    const result = await db.select().from(schema.players).limit(5).all();
+    // Remove the .all() call - it's not needed with drizzle-orm/node-postgres
+    const result = await db.select().from(schema.players).limit(5);
     console.log("Players:", result);
   } catch (error) {
     console.error("Error with query:", error);
