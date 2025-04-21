@@ -24,24 +24,11 @@ pool
   .connect()
   .then(() => console.log('✅ Connected to Postgres'))
   .catch((err) => console.error('❌ Postgres connection error:', err));
-async function addSelectionPercentColumn() {
-  try {
-    await pool.query(`
-      ALTER TABLE players 
-      ADD COLUMN selection_percent INTEGER DEFAULT 0 NOT NULL
-    `);
-    console.log("Added selection_percent column to players table");
-  } catch (error) {
-    console.error("Error adding column:", error);
-  }
-}
 
-// Call this function to add the column
-addSelectionPercentColumn();
-
+// Modified test query (removed .all())
 async function testQuery() {
   try {
-    // Remove the .all() call - it's not needed with drizzle-orm/node-postgres
+    // Fixed: removed the .all() method
     const result = await db.select().from(schema.players).limit(5);
     console.log("Players:", result);
   } catch (error) {
@@ -49,4 +36,21 @@ async function testQuery() {
   }
 }
 
+// Add the missing selection_percent column if needed
+async function addSelectionPercentColumn() {
+  try {
+    await pool.query(`
+      ALTER TABLE players 
+      ADD COLUMN IF NOT EXISTS selection_percent INTEGER DEFAULT 0 NOT NULL
+    `);
+    console.log("Ensured selection_percent column exists in players table");
+  } catch (error) {
+    console.error("Error modifying table:", error);
+  }
+}
+
+// Run the column check and add if needed
+addSelectionPercentColumn();
+
+// Run test query afterwards
 testQuery();
