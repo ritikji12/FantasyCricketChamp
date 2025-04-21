@@ -1,278 +1,309 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, hashPassword } from "./auth";
-import { db } from "./db";
-import { updatePlayerPointsSchema, createTeamWithPlayersSchema } from "@shared/schema";
+import { setupAuth } from "./auth";
 import { z } from "zod";
+import { insertTeamSchema, insertTeamPlayerSchema } from "@shared/schema";
+import { db } from "./db";
+import { scrypt, randomBytes } from "crypto";
+import { promisify } from "util";
 
-// Helper function to ensure user is authenticated
-function ensureAuthenticated(req: Request, res: Response, next: Function) {
+const scryptAsync = promisify(scrypt);
+
+// Helper function to hash passwords
+async function hashPassword(password: string) {
+  const salt = randomBytes(16).toString("hex");
+  const buf = (await scryptAsync(password, salt, 64)) as Buffer;
+  return `${buf.toString("hex")}.${salt}`;
+}
+
+// Check if user is authenticated
+function isAuthenticated(req: Request, res: Response, next: Function) {
   if (req.isAuthenticated()) {
     return next();
   }
   res.status(401).json({ message: "Unauthorized" });
 }
 
-// Helper function to ensure user is admin
-function ensureAdmin(req: Request, res: Response, next: Function) {
-  if (req.isAuthenticated() && req.user && req.user.isAdmin) {
+// Check if user is admin
+function isAdmin(req: Request, res: Response, next: Function) {
+  if (req.isAuthenticated() && req.user?.isAdmin) {
     return next();
   }
-  res.status(403).json({ message: "Forbidden - Admin access required" });
+  res.status(403).json({ message: "Forbidden" });
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
   setupAuth(app);
-  
-  // Initialize the database with default data if needed
+
+  // Initialize database with player categories and players if they don't exist
   await initializeDatabase();
-  
-  // Match routes
-  app.get("/api/match/current", async (req, res) => {
+
+  // Contest routes
+
+  // Get all contests
+  // Create a new match (admin only)
+  app.post("/api/matches", isAuthenticated, isAdmin, async (req, res) => {
     try {
-      const match = await storage.getCurrentMatch();
-      if (!match) {
-        return res.status(404).json({ message: "No live match found" });
+      const { team1, team2 } = req.body;
+      
+      if (!team1 || !team2) {
+        return res.status(400).json({ message: "Both teams are required" });
       }
-      res.json(match);
+
+      const [match] = await db.insert(matches).values({
+        team1,
+        team2,
+        status: 'live'
+      }).returning();
+
+      res.status(201).json(match);
     } catch (error) {
-      console.error("Error fetching current match:", error);
-      res.status(500).json({ message: "Error fetching current match" });
+      res.status(500).json({ message: "Failed to create match" });
     }
   });
-  
-  // Player routes
+
+  app.get("/api/contests", async (req, res) => {
+    try {
+      const contests = await storage.getContests();
+      res.json(contests);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to retrieve contests" });
+    }
+  });
+
+  // Get contest by ID
+  app.get("/api/contests/:id", async (req, res) => {
+    try {
+      const contestId = parseInt(req.params.id);
+      const contest = await storage.getContestById(contestId);
+
+      if (!contest) {
+        return res.status(404).json({ message: "Contest not found" });
+      }
+
+      res.json(contest);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to retrieve contest" });
+    }
+  });
+
+  // Create a new contest (admin only)
+  app.post("/api/contests", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const contestData = req.body;
+      const newContest = await storage.createContest(contestData);
+      res.status(201).json(newContest);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create contest" });
+    }
+  });
+
+  // Update a contest (admin only)
+  app.patch("/api/contests/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const contestId = parseInt(req.params.id);
+      const contestData = req.body;
+
+      const updatedContest = await storage.updateContest(contestId, contestData);
+      res.json(updatedContest);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update contest" });
+    }
+  });
+
+  // Delete a contest (admin only)
+  app.delete("/api/contests/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const contestId = parseInt(req.params.id);
+      await storage.deleteContest(contestId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete contest" });
+    }
+  });
+
+  // Toggle contest live status (admin only)
+  app.patch("/api/contests/:id/status", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const contestId = parseInt(req.params.id);
+      const { isLive } = req.body;
+
+      if (typeof isLive !== 'boolean') {
+        return res.status(400).json({ message: "isLive must be a boolean" });
+      }
+
+      const updatedContest = await storage.setContestLiveStatus(contestId, isLive);
+      res.json(updatedContest);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update contest status" });
+    }
+  });
+
+  // Get all players
   app.get("/api/players", async (req, res) => {
     try {
-      const categoryId = req.query.categoryId ? parseInt(req.query.categoryId as string) : undefined;
-      const includeStats = req.query.stats === 'true';
-      
-      let players;
-      if (categoryId) {
-        players = await storage.getPlayersByCategory(categoryId);
-      } else {
-        players = await storage.getAllPlayers();
-      }
-      
-      // Add selection percentage statistics if requested
-      if (includeStats) {
-        const stats = await storage.getPlayerSelectionStats();
-        const playersWithStats = players.map(player => {
-          const playerStat = stats.find(stat => stat.playerId === player.id);
-          return {
-            ...player,
-            selectionPercentage: playerStat ? playerStat.percentage : 0
-          };
-        });
-        res.json(playersWithStats);
-      } else {
-        res.json(players);
-      }
+      const players = await storage.getPlayers();
+      res.json(players);
     } catch (error) {
-      console.error("Error fetching players:", error);
-      res.status(500).json({ message: "Error fetching players" });
+      res.status(500).json({ message: "Failed to retrieve players" });
     }
   });
-  
-  app.get("/api/players/categories", async (req, res) => {
+
+  // Get players by category
+  app.get("/api/players/category/:id", async (req, res) => {
     try {
-      const categories = await storage.getPlayerCategories();
-      res.json(categories);
+      const categoryId = parseInt(req.params.id);
+      const players = await storage.getPlayersByCategory(categoryId);
+      res.json(players);
     } catch (error) {
-      console.error("Error fetching player categories:", error);
-      res.status(500).json({ message: "Error fetching player categories" });
-    }
-  });
-  
-  // Admin routes
-  app.patch("/api/admin/teams/:teamId", ensureAdmin, async (req, res) => {
-    try {
-      const teamId = parseInt(req.params.teamId);
-      const { playerIds, captainId, viceCaptainId } = req.body;
-
-      // Validate new team composition
-      const players = await storage.getAllPlayers();
-      const bowlerCategory = await storage.getPlayerCategoryByName("Bowler");
-      
-      if (!bowlerCategory) {
-        return res.status(400).json({ message: "Bowler category not found" });
-      }
-
-      const selectedBowlers = players
-        .filter(p => playerIds.includes(p.id) && p.categoryId === bowlerCategory.id)
-        .length;
-
-      if (selectedBowlers < 3) {
-        return res.status(400).json({ message: "Team must include at least 3 bowlers" });
-      }
-
-      // Delete existing team players
-      await db.delete(teamPlayers).where(eq(teamPlayers.teamId, teamId));
-
-      // Add new players
-      for (const playerId of playerIds) {
-        await storage.addPlayerToTeam({
-          teamId,
-          playerId,
-          isCaptain: playerId === captainId,
-          isViceCaptain: playerId === viceCaptainId
-        });
-      }
-
-      const updatedTeam = await storage.getTeam(teamId);
-      const updatedPlayers = await storage.getTeamPlayers(teamId);
-
-      res.json({ team: updatedTeam, players: updatedPlayers });
-    } catch (error) {
-      console.error("Error updating team:", error);
-      res.status(500).json({ message: "Error updating team" });
+      res.status(500).json({ message: "Failed to retrieve players by category" });
     }
   });
 
-  app.patch("/api/admin/players/:id/points", ensureAdmin, async (req, res) => {
+  // Update player points (admin only)
+  app.put("/api/players/:id", isAdmin, async (req, res) => {
     try {
       const playerId = parseInt(req.params.id);
-      const result = updatePlayerPointsSchema.safeParse({
-        id: playerId,
-        ...req.body
-      });
-      
-      if (!result.success) {
-        return res.status(400).json({ message: "Invalid player data", errors: result.error.format() });
+      const { points } = req.body;
+
+      if (typeof points !== 'number') {
+        return res.status(400).json({ message: "Points must be a number" });
       }
-      
-      const updatedPlayer = await storage.updatePlayerPoints(result.data);
+
+      const updatedPlayer = await storage.updatePlayerPoints(playerId, points);
       res.json(updatedPlayer);
     } catch (error) {
-      console.error("Error updating player points:", error);
-      res.status(500).json({ message: "Error updating player points" });
+      res.status(500).json({ message: "Failed to update player points" });
     }
   });
-  
-  app.get("/api/admin/teams", ensureAdmin, async (req, res) => {
+
+  // Create a team
+  app.post("/api/teams", isAuthenticated, async (req, res) => {
     try {
-      const teams = await storage.getTeamsWithPlayers();
-      res.json(teams);
-    } catch (error) {
-      console.error("Error fetching teams for admin:", error);
-      res.status(500).json({ message: "Error fetching teams" });
-    }
-  });
-  
-  // Team routes
-  app.post("/api/teams", ensureAuthenticated, async (req, res) => {
-    try {
-      const userId = (req.user as any).id;
-      
+      const userId = req.user!.id;
+
       // Check if user already has a team
-      const existingTeam = await storage.getUserTeam(userId);
+      const existingTeam = await storage.getTeamByUserId(userId);
       if (existingTeam) {
         return res.status(400).json({ message: "You already have a team" });
       }
-      
-      const result = createTeamWithPlayersSchema.safeParse(req.body);
-      if (!result.success) {
-        return res.status(400).json({ message: "Invalid team data", errors: result.error.format() });
-      }
-      
-      const { teamName, playerIds, captainId, viceCaptainId, totalCredits } = result.data;
-      
-      // Check if team exceeds 1000 points/credits limit
-      if (totalCredits > 1000) {
-        return res.status(400).json({ message: "Team exceeds the 1000 points credit limit" });
-      }
 
-      // Check for minimum 3 bowlers requirement
-      const players = await storage.getAllPlayers();
-      const bowlerCategory = await storage.getPlayerCategoryByName("Bowler");
-      if (!bowlerCategory) {
-        return res.status(400).json({ message: "Bowler category not found" });
-      }
-
-      const selectedBowlers = players
-        .filter(p => playerIds.includes(p.id) && p.categoryId === bowlerCategory.id)
-        .length;
-
-      if (selectedBowlers < 3) {
-        return res.status(400).json({ message: "Team must include at least 3 bowlers" });
-      }
-      
-      // Validate captain and vice-captain
-      if (!playerIds.includes(captainId)) {
-        return res.status(400).json({ message: "Captain must be a selected player" });
-      }
-      
-      if (!playerIds.includes(viceCaptainId)) {
-        return res.status(400).json({ message: "Vice-Captain must be a selected player" });
-      }
-      
-      if (captainId === viceCaptainId) {
-        return res.status(400).json({ message: "Captain and Vice-Captain cannot be the same player" });
-      }
-      
-      // Create the team
-      const team = await storage.createTeam({
-        name: teamName,
+      const teamData = insertTeamSchema.parse({
+        ...req.body,
         userId
       });
-      
-      // Add players to the team
-      for (const playerId of playerIds) {
+
+      const team = await storage.createTeam(teamData);
+
+      // Add players to team
+      const { playerIds, captain, viceCaptain } = req.body;
+      if (Array.isArray(playerIds)) {
+        for (const playerId of playerIds) {
+          await storage.addPlayerToTeam({
+            teamId: team.id,
+            playerId,
+            isCaptain: playerId === captain,
+            isViceCaptain: playerId === viceCaptain
+          });
+        }
+      }
+
+      // Add fixed "None" wicketkeeper
+      const wicketkeepers = await storage.getPlayersByCategory(4); // Assuming 4 is wicketkeeper category
+      if (wicketkeepers.length > 0) {
         await storage.addPlayerToTeam({
           teamId: team.id,
-          playerId,
-          isCaptain: playerId === captainId,
-          isViceCaptain: playerId === viceCaptainId
+          playerId: wicketkeepers[0].id,
+          isCaptain: false,
+          isViceCaptain: false
         });
       }
-      
-      // Return the created team with its players
-      const teamPlayers = await storage.getTeamPlayers(team.id);
-      res.status(201).json({
-        team,
-        players: teamPlayers
-      });
+
+      // Get complete team with players
+      const teamWithPlayers = await storage.getTeamWithPlayers(team.id);
+      res.status(201).json(teamWithPlayers);
     } catch (error) {
-      console.error("Error creating team:", error);
-      res.status(500).json({ message: "Error creating team" });
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Invalid team data", errors: error.errors });
+      } else {
+        res.status(500).json({ message: "Failed to create team" });
+      }
     }
   });
-  
-  app.get("/api/teams/my-team", ensureAuthenticated, async (req, res) => {
+
+  // Get user's team
+  app.get("/api/teams/my-team", isAuthenticated, async (req, res) => {
     try {
-      const userId = (req.user as any).id;
-      const team = await storage.getUserTeam(userId);
-      
+      const userId = req.user!.id;
+      const team = await storage.getTeamByUserId(userId);
+
       if (!team) {
         return res.status(404).json({ message: "You don't have a team yet" });
       }
-      
-      const players = await storage.getTeamPlayers(team.id);
-      const totalPoints = await storage.calculateTeamPoints(team.id);
-      const rank = await storage.getTeamRank(team.id);
-      
-      res.json({
-        team,
-        players,
-        totalPoints,
-        rank
-      });
+
+      res.json(team);
     } catch (error) {
-      console.error("Error fetching user team:", error);
-      res.status(500).json({ message: "Error fetching your team" });
+      res.status(500).json({ message: "Failed to retrieve team" });
     }
   });
-  
-  // Leaderboard
-  app.get("/api/leaderboard", async (req, res) => {
+
+  // Get team rankings
+  app.get("/api/teams/rankings", async (req, res) => {
     try {
-      const leaderboard = await storage.getLeaderboard();
-      res.json(leaderboard);
+      const rankings = await storage.getTeamRankings();
+      res.json(rankings);
     } catch (error) {
-      console.error("Error fetching leaderboard:", error);
-      res.status(500).json({ message: "Error fetching leaderboard" });
+      res.status(500).json({ message: "Failed to retrieve team rankings" });
+    }
+  });
+
+  // Get all teams with players (admin only)
+  app.get("/api/teams", isAdmin, async (req, res) => {
+    try {
+      const teams = await storage.getAllTeamsWithPlayers();
+      res.json(teams);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to retrieve teams" });
+    }
+  });
+
+  // Get teams by contest ID (admin only)
+  app.get("/api/contests/:id/teams", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const contestId = parseInt(req.params.id);
+      const teams = await storage.getTeamsByContestId(contestId);
+      res.json(teams);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to retrieve teams for contest" });
+    }
+  });
+
+  // Delete a team (admin only)
+  app.delete("/api/teams/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const teamId = parseInt(req.params.id);
+      await storage.deleteTeamById(teamId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete team" });
+    }
+  });
+
+  // Get team by id
+  app.get("/api/teams/:id", isAuthenticated, async (req, res) => {
+    try {
+      const teamId = parseInt(req.params.id);
+      const team = await storage.getTeamWithPlayers(teamId);
+
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+
+      res.json(team);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to retrieve team" });
     }
   });
 
@@ -280,71 +311,105 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return httpServer;
 }
 
-// Initialize database with default data
+// Helper function to initialize database with admin user and initial data
 async function initializeDatabase() {
   try {
-    // Check if we already have player categories
-    const categories = await storage.getPlayerCategories();
-    
-    if (categories.length === 0) {
-      // Create player categories
-      const allRounder = await storage.createPlayerCategory({ name: "All Rounder" });
-      const batsman = await storage.createPlayerCategory({ name: "Batsman" });
-      const bowler = await storage.createPlayerCategory({ name: "Bowler" });
-      const wicketkeeper = await storage.createPlayerCategory({ name: "Wicketkeeper" });
-      
-      // Create players according to the requirements
-      // All Rounders
-      await storage.createPlayer({ name: "Ankur", categoryId: allRounder.id, points: 200, runs: 75, wickets: 2 });
-      await storage.createPlayer({ name: "Prince", categoryId: allRounder.id, points: 150, runs: 50, wickets: 1 });
-      await storage.createPlayer({ name: "Mayank", categoryId: allRounder.id, points: 140, runs: 45, wickets: 1 });
-      await storage.createPlayer({ name: "Amit", categoryId: allRounder.id, points: 150, runs: 55, wickets: 1 });
-      
-      // Batsmen
-      await storage.createPlayer({ name: "Kuki", categoryId: batsman.id, points: 160, runs: 80, wickets: 0 });
-      await storage.createPlayer({ name: "Captain", categoryId: batsman.id, points: 90, runs: 45, wickets: 0 });
-      await storage.createPlayer({ name: "Chintu", categoryId: batsman.id, points: 110, runs: 55, wickets: 0 });
-      await storage.createPlayer({ name: "Paras Kumar", categoryId: batsman.id, points: 90, runs: 45, wickets: 0 });
-      await storage.createPlayer({ name: "Pushkar", categoryId: batsman.id, points: 100, runs: 50, wickets: 0 });
-      await storage.createPlayer({ name: "Dhilu", categoryId: batsman.id, points: 55, runs: 25, wickets: 0 });
-      await storage.createPlayer({ name: "Kamal", categoryId: batsman.id, points: 110, runs: 55, wickets: 0 });
-      await storage.createPlayer({ name: "Ajay", categoryId: batsman.id, points: 35, runs: 15, wickets: 0 });
-      
-      // Bowlers
-      await storage.createPlayer({ name: "Pulkit", categoryId: bowler.id, points: 55, runs: 5, wickets: 1 });
-      await storage.createPlayer({ name: "Nitish", categoryId: bowler.id, points: 110, runs: 10, wickets: 3 });
-      await storage.createPlayer({ name: "Rahul", categoryId: bowler.id, points: 110, runs: 5, wickets: 3 });
-      await storage.createPlayer({ name: "Karambeer", categoryId: bowler.id, points: 95, runs: 5, wickets: 2 });
-      await storage.createPlayer({ name: "Manga", categoryId: bowler.id, points: 90, runs: 10, wickets: 2 });
-      
-      // Wicketkeeper
-      await storage.createPlayer({ name: "None", categoryId: wicketkeeper.id, points: 0, runs: 0, wickets: 0 });
-      
-      // Create the match
-      await storage.createMatch({
-        id: 1,
-        team1: "Team Dominator",
-        team2: "Team Destroyer",
-        status: "live",
-        createdAt: new Date()
-      });
-      
+    // Check if admin user exists
+    const adminUser = await storage.getUserByUsername("admin");
+    if (!adminUser) {
       // Create admin user with fixed credentials
-      const adminExists = await storage.getUserByUsername("admin");
-      if (!adminExists) {
-        await storage.createUser({
-          username: "admin",
-          password: await hashPassword("ritik123"), // Using the hashPassword function from auth.ts
-          name: "Admin",
-          email: "admin@cr13k3t.com",
-          isAdmin: true
-        });
-        console.log("Admin user created");
-      }
-      
-      console.log("Database initialized with default data");
+      await storage.createUser({
+        username: "admin",
+        password: await hashPassword("ritik123"),
+        isAdmin: true
+      });
+      console.log("Admin user created with username: admin, password: ritik123");
     }
+
+    // Initialize player categories if they don't exist
+    const playerCategories = await db.select().from("playerCategories");
+    if (playerCategories.length === 0) {
+      console.log("Creating player categories...");
+      await db.insert("playerCategories").values([
+        { name: "All-Rounder" },
+        { name: "Batsman" },
+        { name: "Bowler" },
+        { name: "Wicketkeeper" }
+      ]);
+      console.log("Player categories created");
+    }
+
+    // Initialize players if they don't exist
+    const players = await db.select().from("players");
+    if (players.length === 0) {
+      console.log("Creating players...");
+
+      // Get category IDs
+      const categories = await db.select().from(playerCategories);
+      const categoryMap = new Map();
+      categories.forEach(category => {
+        categoryMap.set(category.name, category.id);
+      });
+
+      const allRounderId = categoryMap.get("All-Rounder");
+      const batsmanId = categoryMap.get("Batsman");
+      const bowlerId = categoryMap.get("Bowler");
+      const wicketkeeperId = categoryMap.get("Wicketkeeper");
+
+      // Add All-Rounders
+      await db.insert("players").values([
+        { name: "Ankur", categoryId: allRounderId, creditPoints: 200, performancePoints: 0, selectionPercent: 35 },
+        { name: "Prince", categoryId: allRounderId, creditPoints: 150, performancePoints: 0, selectionPercent: 28 },
+        { name: "Mayank", categoryId: allRounderId, creditPoints: 140, performancePoints: 0, selectionPercent: 25 },
+        { name: "Amit", categoryId: allRounderId, creditPoints: 150, performancePoints: 0, selectionPercent: 30 }
+      ]);
+
+      // Add Batsmen
+      await db.insert("players").values([
+        { name: "Kuki", categoryId: batsmanId, creditPoints: 160, performancePoints: 0, selectionPercent: 40 },
+        { name: "Captain", categoryId: batsmanId, creditPoints: 90, performancePoints: 0, selectionPercent: 15 },
+        { name: "Chintu", categoryId: batsmanId, creditPoints: 110, performancePoints: 0, selectionPercent: 20 },
+        { name: "Paras Kumar", categoryId: batsmanId, creditPoints: 90, performancePoints: 0, selectionPercent: 18 },
+        { name: "Pushkar", categoryId: batsmanId, creditPoints: 100, performancePoints: 0, selectionPercent: 22 },
+        { name: "Dhilu", categoryId: batsmanId, creditPoints: 55, performancePoints: 0, selectionPercent: 10 },
+        { name: "Kamal", categoryId: batsmanId, creditPoints: 110, performancePoints: 0, selectionPercent: 25 },
+        { name: "Ajay", categoryId: batsmanId, creditPoints: 35, performancePoints: 0, selectionPercent: 5 }
+      ]);
+
+      // Add Bowlers
+      await db.insert("players").values([
+        { name: "Pulkit", categoryId: bowlerId, creditPoints: 55, performancePoints: 0, selectionPercent: 15 },
+        { name: "Nitish", categoryId: bowlerId, creditPoints: 110, performancePoints: 0, selectionPercent: 30 },
+        { name: "Rahul", categoryId: bowlerId, creditPoints: 110, performancePoints: 0, selectionPercent: 32 },
+        { name: "Karambeer", categoryId: bowlerId, creditPoints: 95, performancePoints: 0, selectionPercent: 28 },
+        { name: "Manga", categoryId: bowlerId, creditPoints: 90, performancePoints: 0, selectionPercent: 25 }
+      ]);
+
+      // Add "None" wicketkeeper
+      await db.insert("players").values([
+        { name: "None", categoryId: wicketkeeperId, creditPoints: 0, performancePoints: 0, selectionPercent: 100 }
+      ]);
+
+      console.log("Players created");
+    }
+
+    // Create a default contest if none exists
+    const contests = await db.select().from("contests");
+    if (contests.length === 0) {
+      console.log("Creating default contest...");
+      await db.insert("contests").values({
+        name: "Dominator vs Destroyer Match",
+        description: "Team Dominator takes on Team Destroyer in this exciting match!",
+        rules: "1. Select 8 players within the 1000 credit limit.\n2. Include at least 2 bowlers.\n3. Assign a Captain (2x points) and Vice-Captain (1.5x points).",
+        prizePool: 10000,
+        entryFee: 100,
+        maxEntries: 200,
+        isLive: false
+      });
+      console.log("Default contest created");
+    }
+
   } catch (error) {
-    console.error("Error initializing database:", error);
+    console.error("Failed to initialize database:", error);
   }
 }
