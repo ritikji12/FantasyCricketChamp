@@ -1,9 +1,9 @@
 
-import express, { Request, Response, NextFunction } from "express";
-import session from "express-session";
-import { registerRoutes } from "./routes";
-import { apiErrorHandler, apiContentTypeMiddleware } from "./middleware";
-import { setPlayerCreditPoints } from "./set-player-credits";
+const express = require("express");
+const session = require("express-session");
+const { registerRoutes } = require("./routes");
+const { apiErrorHandler, apiContentTypeMiddleware } = require("./middleware");
+const { setPlayerCreditPoints } = require("./set-player-credits");
 
 // Create Express application
 const app = express();
@@ -50,7 +50,11 @@ async function startServer() {
 
 // Start server if this is the main module
 // Start server immediately since we're using ES modules
-startServer().catch(err => {
-  console.error("Failed to start server:", err);
-  process.exit(1);
-});
+if (require.main === module) {
+  startServer().catch(err => {
+    console.error("Failed to start server:", err);
+    process.exit(1);
+  });
+}
+
+module.exports = { startServer };
