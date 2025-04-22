@@ -10,7 +10,15 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { UpdatePlayerPoints } from '@shared/schema';
+import { updatePlayerPointsSchema } from '@shared/schema';
+
+// Define type for player updates
+type UpdatePlayerPoints = {
+  id: number;
+  points?: number;
+  runs?: number;
+  wickets?: number;
+};
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -55,35 +63,40 @@ export default function AdminPage() {
     queryKey: ['/api/players/categories'],
     enabled: Boolean(isAdmin)
   });
+  
+  // Fetch users
+  const { data: users = [], isLoading: isLoadingUsers } = useQuery({
+    queryKey: ['/api/users'],
+    enabled: Boolean(isAdmin)
+  });
 
   // Fetch teams
   const { data: teams = [], isLoading: isLoadingTeams } = useQuery({
-    queryKey: ['/api/admin/teams'],
+    queryKey: ['/api/teams'],
     enabled: Boolean(isAdmin)
   });
   
   // Fetch matches
   const { data: matches = [], isLoading: isLoadingMatches } = useQuery({
-    queryKey: ['/api/admin/matches'],
+    queryKey: ['/api/matches'],
     enabled: Boolean(isAdmin)
   });
   
   // Fetch contests
   const { data: contests = [], isLoading: isLoadingContests } = useQuery({
-    queryKey: ['/api/admin/contests'],
+    queryKey: ['/api/contests'],
     enabled: Boolean(isAdmin)
   });
 
   // Update player points mutation
-  // Update player points mutation
   const updatePlayerMutation = useMutation({
-    mutationFn: async (player: UpdatePlayerPoints) => {
-      const res = await apiRequest("PATCH", `/api/admin/players/${player.id}/points`, player);
+    mutationFn: async (player: any) => {
+      const res = await apiRequest("PATCH", `/api/players/${player.id}/points`, player);
       return await res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/players'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/teams'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/teams'] });
       queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
       toast({
         title: "Player scores updated",
@@ -102,11 +115,11 @@ export default function AdminPage() {
   // Delete team mutation
   const deleteTeamMutation = useMutation({
     mutationFn: async (teamId: number) => {
-      const res = await apiRequest("DELETE", `/api/admin/teams/${teamId}`);
+      const res = await apiRequest("DELETE", `/api/teams/${teamId}`);
       return await res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/teams'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/teams'] });
       queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
       toast({
         title: "Team deleted",
@@ -125,12 +138,12 @@ export default function AdminPage() {
   // Create match mutation
   const createMatchMutation = useMutation({
     mutationFn: async (matchData: { team1: string, team2: string, date: string }) => {
-      const res = await apiRequest("POST", "/api/admin/matches", matchData);
+      const res = await apiRequest("POST", "/api/matches", matchData);
       return await res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/matches'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/match/current'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/matches'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/matches/live'] });
       toast({
         title: "Match created",
         description: "New match has been created successfully.",
@@ -146,14 +159,70 @@ export default function AdminPage() {
     }
   });
   
-  // Create contest mutation
-  const createContestMutation = useMutation({
-    mutationFn: async (contestData: { name: string, rules: string, prize: string, entryFee: number }) => {
-      const res = await apiRequest("POST", "/api/admin/contests", contestData);
+  // Update match status mutation
+  const updateMatchStatusMutation = useMutation({
+    mutationFn: async ({ matchId, status }: { matchId: number, status: 'live' | 'completed' | 'upcoming' }) => {
+      const res = await apiRequest("PATCH", `/api/matches/${matchId}/status`, { status });
       return await res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/contests'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/matches'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/matches/live'] });
+      toast({
+        title: "Match status updated",
+        description: "Match status has been updated successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to update match status",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Delete user mutation
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: number) => {
+      const res = await apiRequest("DELETE", `/api/users/${userId}`);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/users'] });
+      toast({
+        title: "User deleted",
+        description: "The user has been removed from the system.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to delete user",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Create contest mutation
+  const createContestMutation = useMutation({
+    mutationFn: async (contestData: { name: string, rules: string, prize: string, entryFee: number }) => {
+      // Convert the client's prize field to prizePool for server
+      const serverData = {
+        name: contestData.name,
+        rules: contestData.rules,
+        prizePool: 0, // Default prize pool amount
+        description: contestData.prize, // Use prize as description since server expects it
+        entryFee: contestData.entryFee,
+        maxEntries: 100, // Default max entries
+        isLive: false // Default to not live
+      };
+      
+      const res = await apiRequest("POST", "/api/contests", serverData);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/contests'] });
       toast({
         title: "Contest created",
         description: "New contest has been created successfully.",
@@ -469,6 +538,66 @@ export default function AdminPage() {
                 </CardContent>
               </Card>
               
+              {/* Manage Matches */}
+              <Card className="mb-6">
+                <CardContent className="pt-6">
+                  <h3 className="font-montserrat font-bold text-lg mb-4">Manage Matches</h3>
+                  <div className="overflow-x-auto mb-4">
+                    <table className="min-w-full border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Teams</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {matches.map((match: any) => (
+                          <tr key={match.id}>
+                            <td className="px-4 py-2 whitespace-nowrap">{match.id}</td>
+                            <td className="px-4 py-2 whitespace-nowrap">{match.team1} vs {match.team2}</td>
+                            <td className="px-4 py-2 whitespace-nowrap">
+                              <span className={`px-2 py-1 rounded-full text-xs ${
+                                match.status === 'live' 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : match.status === 'completed' 
+                                    ? 'bg-gray-100 text-gray-800'
+                                    : 'bg-blue-100 text-blue-800'
+                              }`}>
+                                {match.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2 whitespace-nowrap">
+                              <div className="flex space-x-2">
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+                                  onClick={() => updateMatchStatusMutation.mutate({ matchId: match.id, status: 'live' })}
+                                  disabled={match.status === 'live' || updateMatchStatusMutation.isPending}
+                                >
+                                  Make Live
+                                </Button>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  className="bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100"
+                                  onClick={() => updateMatchStatusMutation.mutate({ matchId: match.id, status: 'completed' })}
+                                  disabled={match.status === 'completed' || updateMatchStatusMutation.isPending}
+                                >
+                                  Complete
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+              
               {/* Create Contest */}
               <Card className="mb-6">
                 <CardContent className="pt-6">
@@ -523,6 +652,86 @@ export default function AdminPage() {
                     ) : null}
                     Create Contest
                   </Button>
+                </CardContent>
+              </Card>
+              
+              {/* User Management */}
+              <Card className="mb-6">
+                <CardContent className="pt-6">
+                  <h3 className="font-montserrat font-bold text-lg mb-4">User Management</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Username</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {users.map((user: any) => (
+                          <tr key={user.id}>
+                            <td className="px-4 py-2 whitespace-nowrap">{user.id}</td>
+                            <td className="px-4 py-2 whitespace-nowrap font-medium">{user.username}</td>
+                            <td className="px-4 py-2 whitespace-nowrap">{user.email || '-'}</td>
+                            <td className="px-4 py-2 whitespace-nowrap">
+                              <span className={`px-2 py-1 rounded-full text-xs ${
+                                user.isAdmin 
+                                  ? 'bg-purple-100 text-purple-800' 
+                                  : 'bg-blue-100 text-blue-800'
+                              }`}>
+                                {user.isAdmin ? 'Admin' : 'User'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2 whitespace-nowrap">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                                onClick={() => {
+                                  // Prevent deleting current user
+                                  if (user.id === (window as any).user?.id) {
+                                    toast({
+                                      title: "Cannot delete yourself",
+                                      description: "You cannot delete your own account",
+                                      variant: "destructive",
+                                    });
+                                    return;
+                                  }
+                                  
+                                  if (user.isAdmin) {
+                                    toast({
+                                      title: "Cannot delete admin",
+                                      description: "Admin accounts cannot be deleted",
+                                      variant: "destructive",
+                                    });
+                                    return;
+                                  }
+                                  
+                                  deleteUserMutation.mutate(user.id);
+                                }}
+                                disabled={deleteUserMutation.isPending || user.isAdmin}
+                              >
+                                {deleteUserMutation.isPending ? (
+                                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                ) : null}
+                                Delete
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                        {users.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="px-4 py-3 text-center text-sm text-gray-500">
+                              No users found
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </CardContent>
               </Card>
               
