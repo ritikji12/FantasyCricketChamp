@@ -1,6 +1,7 @@
 // render-setup.cjs - Setup script for Render deployment
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 console.log('Setting up Render environment...');
 
@@ -27,9 +28,6 @@ replitDependencies.forEach(dep => {
     delete renderPackageJson.dependencies[dep];
   }
 });
-
-// Write the modified package.json back
-fs.writeFileSync(packageJsonPath, JSON.stringify(renderPackageJson, null, 2));
 
 // Create a Render-specific Vite config file
 const viteConfigContent = `
@@ -63,8 +61,36 @@ export default defineConfig({
 
 fs.writeFileSync('vite.render.config.js', viteConfigContent);
 
-// Update package.json scripts to use the Render-specific config for build
-renderPackageJson.scripts.build = 'vite build --config vite.render.config.js && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist';
+// IMPORTANT: Create a custom server-wrapper script rather than using package.json build
+renderPackageJson.scripts.build = 'vite build --config vite.render.config.js';
 fs.writeFileSync(packageJsonPath, JSON.stringify(renderPackageJson, null, 2));
 
 console.log('Successfully configured project for Render deployment');
+
+// Create a simple server build and run script
+console.log('Building frontend...');
+try {
+  execSync('npm run build', { stdio: 'inherit' });
+  console.log('Frontend build completed successfully');
+} catch (error) {
+  console.error('Frontend build failed:', error);
+  process.exit(1);
+}
+
+// Create a CommonJS-specific server build with .cjs extension
+console.log('Building backend with CJS extension...');
+try {
+  // Build with .cjs extension explicitly
+  execSync(
+    'npx esbuild server/index.ts --platform=node --packages=external --bundle --format=cjs --outfile=dist/index.cjs',
+    { stdio: 'inherit' }
+  );
+  console.log('Backend build completed successfully');
+} catch (error) {
+  console.error('Backend build failed:', error);
+  process.exit(1);
+}
+
+// Create a simple ESM wrapper to run the CJS file
+const serverWrapper = `
+// server-wrapper.js - ES
