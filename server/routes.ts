@@ -24,18 +24,27 @@ async function hashPassword(password: string) {
 
 // Check if user is authenticated
 function isAuthenticated(req: Request, res: Response, next: NextFunction) {
+  // Set content type for any error responses
+  res.setHeader('Content-Type', 'application/json');
+  
   if (req.isAuthenticated()) {
     return next();
   }
-  res.status(401).json({ message: "Unauthorized" });
+  return res.status(401).json({ message: "Unauthorized" });
 }
 
 // Check if user is admin
 function isAdmin(req: Request, res: Response, next: NextFunction) {
-  if (req.isAuthenticated() && req.user?.isAdmin) {
-    return next();
+  // Set content type for any error responses
+  res.setHeader('Content-Type', 'application/json');
+  
+  if (req.isAuthenticated()) {
+    if (req.user?.isAdmin) {
+      return next();
+    }
+    return res.status(403).json({ message: "Forbidden - Admin access required" });
   }
-  res.status(403).json({ message: "Forbidden" });
+  return res.status(401).json({ message: "Unauthorized" });
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -133,10 +142,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get player categories
   app.get("/api/players/categories", async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
       const categories = await storage.getPlayerCategories();
-      res.json(categories);
+      return res.json(categories);
     } catch (error) {
-      res.status(500).json({ message: "Failed to retrieve player categories" });
+      console.error("Error fetching player categories:", error);
+      return res.status(500).json({ message: "Failed to retrieve player categories" });
     }
   });
 
@@ -144,16 +155,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all matches
   app.get("/api/matches", async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
       const matches = await storage.getMatches();
-      res.json(matches);
+      return res.json(matches);
     } catch (error) {
-      res.status(500).json({ message: "Failed to retrieve matches" });
+      console.error("Error fetching matches:", error);
+      return res.status(500).json({ message: "Failed to retrieve matches" });
     }
   });
   
   // Get live matches or create default one if none exists
   app.get("/api/matches/live", async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
       // Get all matches
       const allMatches = await storage.getMatches();
       
@@ -183,16 +197,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      res.json(liveMatches);
+      return res.json(liveMatches);
     } catch (error) {
       console.error("Error fetching live matches:", error);
-      res.status(500).json({ message: "Failed to retrieve live matches" });
+      return res.status(500).json({ message: "Failed to retrieve live matches" });
     }
   });
 
   // Get match by ID
   app.get("/api/matches/:id", async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
       const matchId = parseInt(req.params.id);
       const match = await storage.getMatchById(matchId);
 
@@ -200,13 +215,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Match not found" });
       }
 
-      res.json(match);
+      return res.json(match);
     } catch (error) {
-      res.status(500).json({ message: "Failed to retrieve match" });
+      console.error("Error fetching match:", error);
+      return res.status(500).json({ message: "Failed to retrieve match" });
     }
   });
 
-  // Create a new match (admin only) - Fixed for doctype error
+  // Create a new match (admin only)
   app.post("/api/matches", isAuthenticated, isAdmin, async (req, res) => {
     try {
       // Make sure the content type is properly set
@@ -248,6 +264,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update match status (admin only)
   app.patch("/api/matches/:id/status", isAuthenticated, isAdmin, async (req, res) => {
     try {
+      // Set content type explicitly
+      res.setHeader('Content-Type', 'application/json');
+      
       const matchId = parseInt(req.params.id);
       const { status } = req.body;
 
@@ -256,9 +275,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const updatedMatch = await storage.updateMatchStatus(matchId, status);
-      res.json(updatedMatch);
+      return res.json(updatedMatch);
     } catch (error) {
-      res.status(500).json({ message: "Failed to update match status" });
+      console.error("Error updating match status:", error);
+      return res.status(500).json({ 
+        message: "Failed to update match status",
+        error: String(error)
+      });
     }
   });
 
@@ -266,16 +289,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all contests
   app.get("/api/contests", async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
       const contests = await storage.getContests();
-      res.json(contests);
+      return res.json(contests);
     } catch (error) {
-      res.status(500).json({ message: "Failed to retrieve contests" });
+      console.error("Error fetching contests:", error);
+      return res.status(500).json({ message: "Failed to retrieve contests" });
     }
   });
 
   // Get contest by ID
   app.get("/api/contests/:id", async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
       const contestId = parseInt(req.params.id);
       const contest = await storage.getContestById(contestId);
 
@@ -283,9 +309,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Contest not found" });
       }
 
-      res.json(contest);
+      return res.json(contest);
     } catch (error) {
-      res.status(500).json({ message: "Failed to retrieve contest" });
+      console.error("Error fetching contest:", error);
+      return res.status(500).json({ message: "Failed to retrieve contest" });
     }
   });
 
@@ -316,30 +343,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update a contest (admin only)
   app.patch("/api/contests/:id", isAuthenticated, isAdmin, async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
       const contestId = parseInt(req.params.id);
       const contestData = req.body;
 
       const updatedContest = await storage.updateContest(contestId, contestData);
-      res.json(updatedContest);
+      return res.json(updatedContest);
     } catch (error) {
-      res.status(500).json({ message: "Failed to update contest" });
+      console.error("Error updating contest:", error);
+      return res.status(500).json({ 
+        message: "Failed to update contest",
+        error: String(error)
+      });
     }
   });
 
   // Delete a contest (admin only)
   app.delete("/api/contests/:id", isAuthenticated, isAdmin, async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
       const contestId = parseInt(req.params.id);
       await storage.deleteContest(contestId);
-      res.status(204).send();
+      return res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete contest" });
+      console.error("Error deleting contest:", error);
+      return res.status(500).json({ 
+        message: "Failed to delete contest",
+        error: String(error)
+      });
     }
   });
 
   // Toggle contest live status (admin only)
   app.patch("/api/contests/:id/status", isAuthenticated, isAdmin, async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
       const contestId = parseInt(req.params.id);
       const { isLive } = req.body;
 
@@ -348,34 +386,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const updatedContest = await storage.setContestLiveStatus(contestId, isLive);
-      res.json(updatedContest);
+      return res.json(updatedContest);
     } catch (error) {
-      res.status(500).json({ message: "Failed to update contest status" });
+      console.error("Error updating contest status:", error);
+      return res.status(500).json({ 
+        message: "Failed to update contest status",
+        error: String(error)
+      });
     }
   });
 
   // Get all players
   app.get("/api/players", async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
       const players = await storage.getPlayers();
-      res.json(players);
+      
+      // Debug log to check data
+      if (players.length > 0) {
+        console.log("Sample player data:", JSON.stringify(players[0], null, 2));
+      }
+      
+      return res.json(players);
     } catch (error) {
-      res.status(500).json({ message: "Error fetching players" });
+      console.error("Error fetching players:", error);
+      return res.status(500).json({ message: "Error fetching players" });
     }
   });
 
   // Get players by category
   app.get("/api/players/category/:id", async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
       const categoryId = parseInt(req.params.id);
       const players = await storage.getPlayersByCategory(categoryId);
-      res.json(players);
+      
+      // Debug log to check data
+      if (players.length > 0) {
+        console.log(`Sample player data for category ${categoryId}:`, JSON.stringify(players[0], null, 2));
+      }
+      
+      return res.json(players);
     } catch (error) {
-      res.status(500).json({ message: "Failed to retrieve players by category" });
+      console.error("Error fetching players by category:", error);
+      return res.status(500).json({ message: "Failed to retrieve players by category" });
     }
   });
 
-  // Update player performance points (admin only) - This updates performance points only, not credit points
+  // Update player performance points (admin only)
   app.put("/api/players/:id", isAuthenticated, isAdmin, async (req, res) => {
     try {
       res.setHeader('Content-Type', 'application/json');
@@ -398,13 +456,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get player selection stats (using existing logic)
+  // Get player selection stats
   app.get("/api/players/stats/selection", async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
       const stats = await storage.getPlayerSelectionStats();
-      res.json(stats);
+      return res.json(stats);
     } catch (error) {
-      res.status(500).json({ message: "Failed to retrieve player selection stats" });
+      console.error("Error fetching player selection stats:", error);
+      return res.status(500).json({ message: "Failed to retrieve player selection stats" });
     }
   });
 
@@ -487,6 +547,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user's team
   app.get("/api/teams/my-team", isAuthenticated, async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
       const userId = req.user!.id;
       const team = await storage.getTeamByUserId(userId);
 
@@ -494,36 +555,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "No team" });
       }
 
-      res.json(team);
+      return res.json(team);
     } catch (error) {
-      res.status(500).json({ message: "Failed to retrieve team" });
+      console.error("Error fetching user's team:", error);
+      return res.status(500).json({ message: "Failed to retrieve team" });
     }
   });
 
-  // Get team rankings - users see their rankings here based on performance points
+  // Get team rankings
   app.get("/api/teams/rankings", async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
       const rankings = await storage.getTeamRankings();
-      // Rankings are based on performance points, not credit points
-      res.json(rankings);
+      return res.json(rankings);
     } catch (error) {
-      res.status(500).json({ message: "Failed to retrieve team rankings" });
+      console.error("Error fetching team rankings:", error);
+      return res.status(500).json({ message: "Failed to retrieve team rankings" });
     }
   });
 
   // Get all teams with players (admin only)
   app.get("/api/teams", isAuthenticated, isAdmin, async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
       const teams = await storage.getAllTeamsWithPlayers();
-      res.json(teams);
+      return res.json(teams);
     } catch (error) {
-      res.status(500).json({ message: "Failed to retrieve teams" });
+      console.error("Error fetching all teams:", error);
+      return res.status(500).json({ message: "Failed to retrieve teams" });
     }
   });
 
   // Get teams by contest ID
   app.get("/api/contests/:id/teams", isAuthenticated, async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
       const contestId = parseInt(req.params.id);
       const isUserAdmin = req.user?.isAdmin === true;
       
@@ -537,15 +603,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Admin gets all teams
-      res.json(teams);
+      return res.json(teams);
     } catch (error) {
-      res.status(500).json({ message: "Failed to retrieve teams" });
+      console.error("Error fetching teams by contest:", error);
+      return res.status(500).json({ message: "Failed to retrieve teams" });
     }
   });
 
   // Delete a team (owner or admin)
   app.delete("/api/teams/:id", isAuthenticated, async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
       const teamId = parseInt(req.params.id);
       const team = await storage.getTeamById(teamId);
       
@@ -559,21 +627,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       await storage.deleteTeamById(teamId);
-      res.status(204).send();
+      return res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete team" });
+      console.error("Error deleting team:", error);
+      return res.status(500).json({ message: "Failed to delete team" });
+    }
+  });
+
+  // Add debug endpoint for credit points display
+  app.get("/api/debug/players-with-credit-points", async (req, res) => {
+    try {
+      res.setHeader('Content-Type', 'application/json');
+      
+      // Get players with categories including credit points
+      const players = await storage.getPlayers();
+      
+      // Format the response to clearly show if credit points are present
+      const debugResponse = players.map(player => ({
+        id: player.id,
+        name: player.name,
+        category: player.categoryName,
+        credit_points_present: player.creditPoints !== undefined,
+        credit_points_value: player.creditPoints,
+        credit_points_type: typeof player.creditPoints
+      })).slice(0, 10); // Just get the first 10 for brevity
+      
+      return res.json({
+        debug_info: "Checking if credit points are present in player data",
+        players: debugResponse
+      });
+    } catch (error) {
+      console.error("Debug error:", error);
+      return res.status(500).json({ error: String(error) });
     }
   });
 
   // API endpoint to get database debug info
   app.get("/api/debug/database", isAuthenticated, isAdmin, async (req, res) => {
     try {
+      res.setHeader('Content-Type', 'application/json');
       // Get counts from tables
       const playerCount = await db.select().from(players).execute();
       const categoryCount = await db.select().from(playerCategories).execute();
       const matchCount = await db.select().from(matches).execute();
       
-      res.json({
+      return res.json({
         status: "Database is healthy",
         recordCounts: {
           players: playerCount.length,
@@ -587,7 +685,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Database debug error:", error);
-      res.status(500).json({ 
+      return res.status(500).json({ 
         status: "Database error",
         error: String(error),
       });
