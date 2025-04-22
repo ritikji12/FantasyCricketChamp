@@ -5,6 +5,8 @@ services:
     buildCommand: |
       # Make custom build script executable
       chmod +x render-build.js
+      # Set Node.js to handle ESM correctly
+      export NODE_OPTIONS="--experimental-modules --es-module-specifier-resolution=node"
       # Run the custom build script
       node render-build.js
     startCommand: npm run start
