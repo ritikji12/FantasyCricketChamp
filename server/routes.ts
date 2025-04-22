@@ -139,6 +139,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Run database initialization
   await initializeDatabase();
 
+  // *******************************
+  // Player Categories, Matches, Users and Contests
+  // *******************************
+
   // Get player categories
   app.get("/api/players/categories", async (req, res) => {
     try {
@@ -293,6 +297,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ 
         success: false,
         message: "Failed to update match status",
+        error: String(error)
+      });
+    }
+  });
+
+  // User routes (admin only)
+  // Get all users
+  app.get("/api/users", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      res.setHeader('Content-Type', 'application/json');
+      
+      // Get all users from database
+      const users = await storage.getAllUsers();
+      
+      // Remove passwords from response
+      const sanitizedUsers = users.map(user => {
+        const { password, ...userWithoutPassword } = user;
+        return userWithoutPassword;
+      });
+      
+      return res.json(sanitizedUsers);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      return res.status(500).json({ 
+        success: false,
+        message: "Failed to retrieve users",
+        error: String(error)
+      });
+    }
+  });
+  
+  // Delete a user (admin only)
+  app.delete("/api/users/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      res.setHeader('Content-Type', 'application/json');
+      
+      const userId = parseInt(req.params.id);
+      
+      // Don't allow deleting the current user
+      if (userId === req.user!.id) {
+        return res.status(400).json({
+          success: false,
+          message: "You cannot delete your own account"
+        });
+      }
+      
+      // Delete the user
+      await storage.deleteUser(userId);
+      
+      return res.json({
+        success: true,
+        message: "User deleted successfully"
+      });
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      return res.status(500).json({ 
+        success: false,
+        message: "Failed to delete user",
         error: String(error)
       });
     }
