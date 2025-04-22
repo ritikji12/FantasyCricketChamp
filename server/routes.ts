@@ -536,7 +536,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update player performance points (admin only)
-  app.put("/api/players/:id", isAuthenticated, isAdmin, async (req, res) => {
+  app.put("/api/players/:id/performance", isAuthenticated, isAdmin, async (req, res) => {
     try {
       // Force content type to be JSON for both request and response
       res.setHeader('Content-Type', 'application/json');
@@ -566,20 +566,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Return successful response
       return res.status(200).json({
         success: true,
-        message: "Player points updated successfully",
+        message: "Player performance points updated successfully",
         player: updatedPlayer
       });
     } catch (error) {
-      console.error("Error updating player points:", error);
+      console.error("Error updating player performance points:", error);
       return res.status(500).json({ 
         success: false,
-        message: "Failed to update player points",
+        message: "Failed to update player performance points",
+        error: String(error)
+      });
+    }
+  });
+  
+  // Update player credit points (admin only)
+  app.put("/api/players/:id/credit", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      // Force content type to be JSON for both request and response
+      res.setHeader('Content-Type', 'application/json');
+      
+      const playerId = parseInt(req.params.id);
+      const { credit } = req.body;
+
+      // Validate credit points
+      if (credit === undefined || credit === null) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Credit points are required" 
+        });
+      }
+      
+      const creditNumber = Number(credit);
+      if (isNaN(creditNumber)) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Credit points must be a number" 
+        });
+      }
+
+      // Update player credit points
+      const updatedPlayer = await storage.updatePlayerCreditPoints(playerId, creditNumber);
+      
+      // Return successful response
+      return res.status(200).json({
+        success: true,
+        message: "Player credit points updated successfully",
+        player: updatedPlayer
+      });
+    } catch (error) {
+      console.error("Error updating player credit points:", error);
+      return res.status(500).json({ 
+        success: false,
+        message: "Failed to update player credit points",
         error: String(error)
       });
     }
   });
 
-  // Update all player scores (admin batch update)
+  // Update all player performance scores (admin batch update)
   app.post("/api/players/update-scores", isAuthenticated, isAdmin, async (req, res) => {
     try {
       // Force content type to be JSON
@@ -644,6 +688,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ 
         success: false,
         message: "Failed to update player scores",
+        error: String(error)
+      });
+    }
+  });
+  
+  // Update all player credit points (admin batch update)
+  app.post("/api/players/update-credit", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      // Force content type to be JSON
+      res.setHeader('Content-Type', 'application/json');
+      
+      const updates = req.body;
+      
+      if (!Array.isArray(updates)) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Expected an array of player credit updates" 
+        });
+      }
+      
+      const results = [];
+      
+      // Process each update
+      for (const update of updates) {
+        if (!update.playerId || update.credit === undefined) {
+          results.push({
+            success: false,
+            playerId: update.playerId,
+            message: "Player ID and credit points are required"
+          });
+          continue;
+        }
+        
+        try {
+          const playerId = Number(update.playerId);
+          const credit = Number(update.credit);
+          
+          if (isNaN(playerId) || isNaN(credit)) {
+            results.push({
+              success: false,
+              playerId: update.playerId,
+              message: "Player ID and credit points must be numbers"
+            });
+            continue;
+          }
+          
+          const updatedPlayer = await storage.updatePlayerCreditPoints(playerId, credit);
+          results.push({
+            success: true,
+            playerId: playerId,
+            player: updatedPlayer
+          });
+        } catch (updateError) {
+          results.push({
+            success: false,
+            playerId: update.playerId,
+            message: String(updateError)
+          });
+        }
+      }
+      
+      return res.status(200).json({
+        success: true,
+        results: results
+      });
+    } catch (error) {
+      console.error("Error updating player credit points:", error);
+      return res.status(500).json({ 
+        success: false,
+        message: "Failed to update player credit points",
         error: String(error)
       });
     }
