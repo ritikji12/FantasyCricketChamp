@@ -1,6 +1,9 @@
 
 import express, { Request, Response, NextFunction } from "express";
 import session from "express-session";
+
+// Use a consistent require variable name
+const _requireESM = createRequire(import.meta.url);
 import { registerRoutes } from "./routes";
 import { apiErrorHandler, apiContentTypeMiddleware } from "./middleware";
 import { setPlayerCreditPoints } from "./set-player-credits";
