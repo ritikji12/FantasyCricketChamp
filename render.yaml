@@ -2,13 +2,9 @@ services:
   - type: web
     name: fantasy-cricket-champ
     env: node
-    nodeVersion: 18.x
-    buildCommand: |
-      # Copy our special package.json over the original one
-      cp render-package.json package.json
-      # Run the build script from our special package.json
-      npm run build
-    startCommand: npm start
+    nodeVersion: 16.x # Use an older Node.js version for more stable CJS behavior
+    buildCommand: node render-build-script.cjs
+    startCommand: node server-wrapper.cjs
     envVars:
       - key: NODE_ENV
         value: production
