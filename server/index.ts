@@ -49,9 +49,8 @@ async function startServer() {
 }
 
 // Start server if this is the main module
-if (import.meta.url === import.meta.resolve('./index.ts')) {
-  startServer().catch(err => {
-    console.error("Failed to start server:", err);
-    process.exit(1);
-  });
-}
+// Start server immediately since we're using ES modules
+startServer().catch(err => {
+  console.error("Failed to start server:", err);
+  process.exit(1);
+});
