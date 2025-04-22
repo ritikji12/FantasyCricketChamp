@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 // render-build.js - Build script for Render
 
-const { execSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+import { execSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 console.log('Starting Render build process...');
 
@@ -18,12 +21,11 @@ try {
   process.exit(1);
 }
 
-// Step 2: Build the backend with esbuild, explicitly excluding problematic packages
-// Important: Using format=cjs to ensure CommonJS compatibility
+// Step 2: Build the backend with esbuild, but as ESM this time
 console.log('Building backend...');
 try {
   execSync(
-    'npx esbuild server/index.ts --platform=node --packages=external --bundle --format=cjs --outdir=dist ' +
+    'npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist ' +
     '--external:@replit/vite-plugin-runtime-error-modal ' +
     '--external:@replit/vite-plugin-cartographer ' + 
     '--external:@replit/vite-plugin-shadcn-theme-json',
@@ -34,18 +36,5 @@ try {
   console.error('Backend build failed:', error);
   process.exit(1);
 }
-
-// Step 3: Create a package.json in the dist directory to explicitly set "type": "commonjs"
-// This ensures Node treats our output as CommonJS regardless of parent directory
-console.log('Creating dist/package.json to specify CommonJS...');
-const distPackageJson = {
-  "name": "fantasy-cricket-champ-dist",
-  "type": "commonjs",
-  "private": true
-};
-fs.writeFileSync(
-  path.join(__dirname, 'dist', 'package.json'), 
-  JSON.stringify(distPackageJson, null, 2)
-);
 
 console.log('Build process completed successfully!');
