@@ -1,3 +1,4 @@
+
 import express, { Request, Response, NextFunction } from "express";
 import session from "express-session";
 import { registerRoutes } from "./routes";
@@ -38,17 +39,16 @@ async function startServer() {
   });
   
   // Run player credit points setup on server start
-  // This will ensure credits are set each time the application is deployed
   try {
     console.log("Running player credit points setup...");
     await setPlayerCreditPoints();
     console.log("Player credit points setup completed successfully.");
   } catch (error) {
     console.error("Failed to set player credit points:", error);
-    // Continue running the server even if credit setup fails
   }
 }
 
+// Start server directly since we're using ES modules
 startServer().catch(err => {
   console.error("Failed to start server:", err);
   process.exit(1);
