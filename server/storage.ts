@@ -18,8 +18,10 @@ export interface IStorage {
   // User operations
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
-  getUserByEmail(email: string): Promise<User | undefined>; // Added method
+  getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  getAllUsers(): Promise<User[]>;
+  deleteUser(id: number): Promise<void>;
   getPlayerCategories(): Promise<typeof playerCategories.$inferSelect[]>;
   
   // Contest operations
@@ -37,7 +39,13 @@ export interface IStorage {
   updatePlayerPoints(id: number, points: number): Promise<Player>;
   updatePlayerCreditPoints(id: number, credit: number): Promise<Player>; 
   updatePlayerSelectionPercent(id: number, percent: number): Promise<Player>;
-  getPlayerSelectionStats(): Promise<any[]>; // Added method
+  getPlayerSelectionStats(): Promise<any[]>;
+  
+  // Match operations
+  getMatches(): Promise<Match[]>;
+  getMatchById(id: number): Promise<Match | undefined>;
+  createMatch(matchData: any): Promise<Match>;
+  updateMatchStatus(id: number, status: string): Promise<Match>;
   
   // Team operations
   createTeam(team: InsertTeam): Promise<Team>;
@@ -88,6 +96,50 @@ export class DatabaseStorage implements IStorage {
   async createUser(user: InsertUser): Promise<User> {
     const [newUser] = await db.insert(users).values(user).returning();
     return newUser;
+  }
+  
+  async getAllUsers(): Promise<User[]> {
+    const allUsers = await db.select().from(users).orderBy(asc(users.username));
+    return allUsers;
+  }
+  
+  async deleteUser(id: number): Promise<void> {
+    // First get user's teams
+    const userTeams = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.userId, id));
+    
+    // Delete team players for each team
+    for (const team of userTeams) {
+      await db
+        .delete(teamPlayers)
+        .where(eq(teamPlayers.teamId, team.id));
+    }
+    
+    // Delete teams
+    if (userTeams.length > 0) {
+      await db
+        .delete(teams)
+        .where(eq(teams.userId, id));
+    }
+    
+    // Delete user's session
+    try {
+      // This is a raw query as there's no direct drizzle method to delete from the session table
+      await db.execute(sql`
+        DELETE FROM "session"
+        WHERE sess -> 'passport' -> 'user' = ${id.toString()}::jsonb
+      `);
+    } catch (error) {
+      console.error("Error deleting user sessions:", error);
+      // Continue with user deletion even if session deletion fails
+    }
+    
+    // Finally delete the user
+    await db
+      .delete(users)
+      .where(eq(users.id, id));
   }
 
   async getPlayerCategories(): Promise<typeof playerCategories.$inferSelect[]> {
@@ -241,6 +293,42 @@ export class DatabaseStorage implements IStorage {
     
     return result.rows;
   }
+  
+  // Match operations
+  async getMatches(): Promise<Match[]> {
+    const allMatches = await db.select().from(matches).orderBy(desc(matches.createdAt));
+    return allMatches;
+  }
+  
+  async getMatchById(id: number): Promise<Match | undefined> {
+    const [match] = await db.select().from(matches).where(eq(matches.id, id));
+    return match;
+  }
+  
+  async createMatch(matchData: any): Promise<Match> {
+    const [newMatch] = await db.insert(matches).values(matchData).returning();
+    return newMatch;
+  }
+  
+  async updateMatchStatus(id: number, status: string): Promise<Match> {
+    const [updatedMatch] = await db
+      .update(matches)
+      .set({ status })
+      .where(eq(matches.id, id))
+      .returning();
+    
+    return updatedMatch;
+  }
+  
+  async updatePlayerCreditPoints(id: number, credit: number): Promise<Player> {
+    const [updatedPlayer] = await db
+      .update(players)
+      .set({ creditPoints: credit })
+      .where(eq(players.id, id))
+      .returning();
+    
+    return updatedPlayer;
+  }
 
   async createTeam(team: InsertTeam): Promise<Team> {
     const [newTeam] = await db.insert(teams).values(team).returning();
@@ -257,7 +345,171 @@ export class DatabaseStorage implements IStorage {
     return team;
   }
 
-  // Continue with the rest of your class implementation...
+  async getTeamWithPlayers(id: number): Promise<TeamWithPlayers | undefined> {
+    // Get the team
+    const [team] = await db.select().from(teams).where(eq(teams.id, id));
+    if (!team) return undefined;
+
+    // Get team players
+    const teamPlayersList = await db
+      .select()
+      .from(teamPlayers)
+      .where(eq(teamPlayers.teamId, id));
+
+    // Get player details for each team player
+    const playerDetails = await Promise.all(
+      teamPlayersList.map(async (tp) => {
+        const [player] = await db
+          .select()
+          .from(players)
+          .where(eq(players.id, tp.playerId));
+        
+        return {
+          ...player,
+          isCaptain: tp.isCaptain,
+          isViceCaptain: tp.isViceCaptain
+        };
+      })
+    );
+
+    // Calculate total points
+    const totalPoints = playerDetails.reduce((sum, player) => {
+      // Captain gets 2x points, vice captain gets 1.5x points
+      if (player.isCaptain) {
+        return sum + (player.performancePoints || 0) * 2;
+      } else if (player.isViceCaptain) {
+        return sum + (player.performancePoints || 0) * 1.5;
+      } else {
+        return sum + (player.performancePoints || 0);
+      }
+    }, 0);
+
+    return {
+      team,
+      players: playerDetails,
+      totalPoints,
+      rank: 0 // Will be calculated by the caller if needed
+    };
+  }
+
+  async getTeamsByUserId(userId: number): Promise<Team[]> {
+    const userTeams = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.userId, userId))
+      .orderBy(desc(teams.createdAt));
+    
+    return userTeams;
+  }
+
+  async getTeamByUserId(userId: number): Promise<TeamWithPlayers | undefined> {
+    // Get the most recent team for this user
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.userId, userId))
+      .orderBy(desc(teams.createdAt))
+      .limit(1);
+    
+    if (!team) return undefined;
+    
+    // Get the team with players
+    return this.getTeamWithPlayers(team.id);
+  }
+
+  async deleteTeamById(id: number): Promise<void> {
+    // First delete team players
+    await db
+      .delete(teamPlayers)
+      .where(eq(teamPlayers.teamId, id));
+    
+    // Then delete the team
+    await db
+      .delete(teams)
+      .where(eq(teams.id, id));
+  }
+
+  async getTeamRankings(): Promise<TeamRanking[]> {
+    // Get all teams with their players
+    const allTeams = await db.select().from(teams);
+    
+    const teamsWithPoints = await Promise.all(
+      allTeams.map(async (team) => {
+        const teamWithPlayers = await this.getTeamWithPlayers(team.id);
+        const [user] = await db.select().from(users).where(eq(users.id, team.userId));
+        
+        return {
+          teamId: team.id,
+          teamName: team.name,
+          userId: team.userId,
+          userName: user ? user.username : 'Unknown',
+          totalPoints: teamWithPlayers ? teamWithPlayers.totalPoints : 0
+        };
+      })
+    );
+    
+    // Sort by points (descending)
+    teamsWithPoints.sort((a, b) => b.totalPoints - a.totalPoints);
+    
+    // Add rank
+    const rankings = teamsWithPoints.map((team, index) => ({
+      ...team,
+      rank: index + 1
+    }));
+    
+    return rankings;
+  }
+
+  async getAllTeamsWithPlayers(): Promise<TeamWithPlayers[]> {
+    const allTeams = await db.select().from(teams);
+    
+    const teamsWithPlayers = await Promise.all(
+      allTeams.map(async (team) => {
+        const teamWithPlayers = await this.getTeamWithPlayers(team.id);
+        return teamWithPlayers!;
+      })
+    );
+    
+    // Filter out undefined values
+    const validTeams = teamsWithPlayers.filter(t => t !== undefined) as TeamWithPlayers[];
+    
+    // Sort by total points
+    validTeams.sort((a, b) => b.totalPoints - a.totalPoints);
+    
+    // Add rank
+    validTeams.forEach((team, index) => {
+      team.rank = index + 1;
+    });
+    
+    return validTeams;
+  }
+
+  async getTeamsByContestId(contestId: number): Promise<TeamWithPlayers[]> {
+    const teamsInContest = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.contestId, contestId));
+    
+    const teamsWithPlayers = await Promise.all(
+      teamsInContest.map(async (team) => {
+        const teamWithPlayers = await this.getTeamWithPlayers(team.id);
+        return teamWithPlayers!;
+      })
+    );
+    
+    // Filter out undefined values
+    const validTeams = teamsWithPlayers.filter(t => t !== undefined) as TeamWithPlayers[];
+    
+    // Sort by total points
+    validTeams.sort((a, b) => b.totalPoints - a.totalPoints);
+    
+    // Add rank
+    validTeams.forEach((team, index) => {
+      team.rank = index + 1;
+    });
+    
+    return validTeams;
+  }
 }
 
 export const storage = new DatabaseStorage();
