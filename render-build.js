@@ -2,6 +2,8 @@
 // render-build.js - Build script for Render
 
 const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 
 console.log('Starting Render build process...');
 
@@ -17,6 +19,7 @@ try {
 }
 
 // Step 2: Build the backend with esbuild, explicitly excluding problematic packages
+// Important: Using format=cjs to ensure CommonJS compatibility
 console.log('Building backend...');
 try {
   execSync(
@@ -31,5 +34,18 @@ try {
   console.error('Backend build failed:', error);
   process.exit(1);
 }
+
+// Step 3: Create a package.json in the dist directory to explicitly set "type": "commonjs"
+// This ensures Node treats our output as CommonJS regardless of parent directory
+console.log('Creating dist/package.json to specify CommonJS...');
+const distPackageJson = {
+  "name": "fantasy-cricket-champ-dist",
+  "type": "commonjs",
+  "private": true
+};
+fs.writeFileSync(
+  path.join(__dirname, 'dist', 'package.json'), 
+  JSON.stringify(distPackageJson, null, 2)
+);
 
 console.log('Build process completed successfully!');
