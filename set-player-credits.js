@@ -1,9 +1,6 @@
-/**
- * Set player credit points script
- * Designed for Render's one-off jobs
- */
 
-const { Pool } = require('pg');
+import pg from 'pg';
+const { Pool } = pg;
 
 // Create database connection
 const pool = new Pool({
