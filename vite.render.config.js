@@ -1,45 +1,47 @@
-// This is a special Vite configuration file for Render deployment
-// It handles the ESM module compatibility issues and avoids top-level await
+// vite.render.config.js - Completely separate from vite.config.ts
+// CommonJS-style Vite configuration for Render deployment
 
+// Use CommonJS syntax for this file
 const { defineConfig } = require('vite');
-const react = require('@vitejs/plugin-react');
 const path = require('path');
-const runtimeErrorOverlay = require('@replit/vite-plugin-runtime-error-modal');
+const react = require('@vitejs/plugin-react');
 
-// Compatibility resolver for @replit/vite-plugin-shadcn-theme-json
-const shadcnThemeResolver = {
-  name: 'shadcn-theme-resolver',
-  resolveId(id) {
-    if (id === '@replit/vite-plugin-shadcn-theme-json') {
-      return { id: 'virtual:shadcn-theme-json', external: true };
-    }
-    return null;
-  }
+// Create stub plugins that replace the ESM-only Replit plugins
+const runtimeErrorStub = {
+  name: 'runtime-error-stub',
+  // Empty stub that mimics the original plugin
 };
 
-// Cartographer plugin wrapper to avoid top-level await
-const cartographerWrapper = {
-  name: 'cartographer-wrapper',
-  // Empty plugin that replaces the actual cartographer in production
+const shadcnThemeStub = {
+  name: 'shadcn-theme-stub',
+  // Empty stub that mimics the original plugin
 };
 
+const cartographerStub = {
+  name: 'cartographer-stub',
+  // Empty stub that mimics the original plugin
+};
+
+// Define the Vite configuration
 module.exports = defineConfig({
   plugins: [
     react(),
-    runtimeErrorOverlay(),
-    shadcnThemeResolver,
-    cartographerWrapper
+    // Use stubs for Replit plugins instead of trying to import ESM modules
+    runtimeErrorStub,
+    shadcnThemeStub,
+    // Only use cartographer in Replit environment, not in production
+    ...(process.env.NODE_ENV !== "production" && process.env.REPL_ID ? [cartographerStub] : [])
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, 'client/src'),
-      '@shared': path.resolve(__dirname, 'shared'),
-      '@assets': path.resolve(__dirname, 'attached_assets'),
+      "@": path.resolve(__dirname, "client", "src"),
+      "@shared": path.resolve(__dirname, "shared"),
+      "@assets": path.resolve(__dirname, "attached_assets"),
     },
   },
-  root: path.resolve(__dirname, 'client'),
+  root: path.resolve(__dirname, "client"),
   build: {
-    outDir: path.resolve(__dirname, 'dist/public'),
+    outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
   },
 });
