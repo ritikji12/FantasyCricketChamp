@@ -7,24 +7,33 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-// Create a virtual shim for the ESM-only module
-const shimDir = path.join(__dirname, 'node_modules', '@replit', 'vite-plugin-shadcn-theme-json');
-if (!fs.existsSync(shimDir)) {
-  fs.mkdirSync(shimDir, { recursive: true });
-  fs.writeFileSync(
-    path.join(shimDir, 'index.js'),
-    'module.exports = function() { return { name: "theme-shim" }; };'
-  );
-  fs.writeFileSync(
-    path.join(shimDir, 'package.json'),
-    JSON.stringify({ name: "@replit/vite-plugin-shadcn-theme-json", main: "index.js" })
-  );
-  console.log('Created compatibility shim for @replit/vite-plugin-shadcn-theme-json');
+// Create virtual shims for ALL the ESM-only modules
+const esmModules = [
+  '@replit/vite-plugin-shadcn-theme-json',
+  '@replit/vite-plugin-cartographer',
+  '@replit/vite-plugin-runtime-error-modal'
+];
+
+// Create shims for all ESM modules
+for (const moduleName of esmModules) {
+  const shimDir = path.join(__dirname, 'node_modules', ...moduleName.split('/'));
+  if (!fs.existsSync(shimDir)) {
+    fs.mkdirSync(shimDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(shimDir, 'index.js'),
+      `module.exports = function() { return { name: "${moduleName.split('/').pop()}-shim" }; };`
+    );
+    fs.writeFileSync(
+      path.join(shimDir, 'package.json'),
+      JSON.stringify({ name: moduleName, main: "index.js" })
+    );
+    console.log(`Created compatibility shim for ${moduleName}`);
+  }
 }
 
 console.log('Starting custom Render build process...');
 
-// Step 1: Build the frontend with vite
+// Step 1: Build the frontend with vite using our custom config
 console.log('Building frontend...');
 try {
   execSync('npx vite build --config vite.render.config.js', { stdio: 'inherit' });
@@ -34,11 +43,11 @@ try {
   process.exit(1);
 }
 
-// Step 2: Build the backend with esbuild (avoiding top-level await)
+// Step 2: Build the backend with esbuild, marking all Replit packages as external
 console.log('Building backend...');
 try {
   execSync(
-    'npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist --external:@replit/vite-plugin-shadcn-theme-json --external:@replit/vite-plugin-cartographer',
+    `npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist ${esmModules.map(m => `--external:${m}`).join(' ')}`,
     { stdio: 'inherit' }
   );
   console.log('Backend build completed successfully');
