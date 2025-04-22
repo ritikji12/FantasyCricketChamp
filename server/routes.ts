@@ -12,6 +12,7 @@ import { db } from "./db";
 import { scrypt, randomBytes } from "crypto";
 import { promisify } from "util";
 import { eq } from "drizzle-orm";
+import { setPlayerCreditPoints } from "./set-player-credits";
 
 const scryptAsync = promisify(scrypt);
 
@@ -302,6 +303,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin endpoint to set player credit points
+  app.post("/api/admin/set-player-credits", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      res.setHeader('Content-Type', 'application/json');
+      
+      console.log("Running player credit points setup...");
+      await setPlayerCreditPoints();
+      
+      return res.status(200).json({
+        success: true,
+        message: "Player credit points set successfully"
+      });
+    } catch (error) {
+      console.error("Error setting player credit points:", error);
+      return res.status(500).json({
+        success: false, 
+        message: "Failed to set player credit points",
+        error: String(error)
+      });
+    }
+  });
+  
   // User routes (admin only)
   // Get all users
   app.get("/api/users", isAuthenticated, isAdmin, async (req, res) => {
