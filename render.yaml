@@ -5,15 +5,16 @@ services:
     buildCommand: |
       # Make custom build script executable
       chmod +x render-build.js
-      # Set Node.js to handle ESM correctly
+      
+      # Set environment variables to ensure we use our custom config
+      export VITE_CONFIG_PATH=vite.render.config.js
       export NODE_OPTIONS="--experimental-modules --es-module-specifier-resolution=node"
+      
       # Run the custom build script
       node render-build.js
-    startCommand: npm run start
+    startCommand: NODE_ENV=production node dist/index.js
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 5000
-      - key: VITE_CONFIG_PATH
-        value: vite.render.config.js
