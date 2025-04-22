@@ -2,11 +2,13 @@ services:
   - type: web
     name: fantasy-cricket-champ
     env: node
-    nodeVersion: 18.x # Explicitly use Node 18 which has more stable ESM/CJS handling
+    nodeVersion: 18.x
     buildCommand: |
-      chmod +x render-build.js
-      node render-build.js
-    startCommand: NODE_ENV=production node dist/index.js
+      # Copy our special package.json over the original one
+      cp render-package.json package.json
+      # Run the build script from our special package.json
+      npm run build
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
