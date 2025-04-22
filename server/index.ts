@@ -1,84 +1,55 @@
-import express, { type Request, Response, NextFunction } from "express";
+import express, { Request, Response, NextFunction } from "express";
+import session from "express-session";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
 import { apiErrorHandler, apiContentTypeMiddleware } from "./middleware";
+import { setPlayerCreditPoints } from "./set-player-credits";
 
+// Create Express application
 const app = express();
+
+// Parse JSON request bodies
 app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-app.use(apiContentTypeMiddleware);
+
+// Apply middleware to ensure proper API response handling
 app.use(apiErrorHandler);
+app.use(apiContentTypeMiddleware);
 
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      log(logLine);
-    }
+// Global error handler
+app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+  console.error(err.stack);
+  
+  // Ensure we don't send HTML error pages for API requests
+  res.setHeader('Content-Type', 'application/json');
+  
+  res.status(500).json({
+    success: false,
+    message: "Internal server error",
+    error: err.message
   });
-
-  next();
 });
 
-(async () => {
+// Register application routes and start server
+async function startServer() {
   const server = await registerRoutes(app);
-
-  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-    
-    // Ensure API routes always return JSON
-    if (req.path.startsWith('/api/')) {
-      res.setHeader('Content-Type', 'application/json');
-    }
-    
-    res.status(status).json({ 
-      message,
-      error: true,
-      path: req.path
-    });
-    
-    log(`Error in ${req.method} ${req.path}: ${message}`, 'error');
-    console.error(err);
+  const port = process.env.PORT || 3000;
+  
+  server.listen(port, () => {
+    console.log(`Server running on port ${port}`);
   });
-
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
+  
+  // Run player credit points setup on server start
+  // This will ensure credits are set each time the application is deployed
+  try {
+    console.log("Running player credit points setup...");
+    await setPlayerCreditPoints();
+    console.log("Player credit points setup completed successfully.");
+  } catch (error) {
+    console.error("Failed to set player credit points:", error);
+    // Continue running the server even if credit setup fails
   }
+}
 
-  // ALWAYS serve the app on port 5000
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = 5000;
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
-  });
-})();
+startServer().catch(err => {
+  console.error("Failed to start server:", err);
+  process.exit(1);
+});
