@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: fantasy-cricket-champ
+    env: node
+    buildCommand: |
+      # Make custom build script executable
+      chmod +x render-build.js
+      # Run the custom build script
+      node render-build.js
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: VITE_CONFIG_PATH
+        value: vite.render.config.js
