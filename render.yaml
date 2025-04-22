@@ -2,9 +2,8 @@ services:
   - type: web
     name: fantasy-cricket-champ
     env: node
-    nodeVersion: 16.x # Use an older Node.js version for more stable CJS behavior
-    buildCommand: node render-build-script.cjs
-    startCommand: node server-wrapper.cjs
+    buildCommand: node build-fix.cjs
+    startCommand: NODE_ENV=production node --experimental-modules run.mjs
     envVars:
       - key: NODE_ENV
         value: production
