@@ -224,92 +224,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Create a new match (admin only)
   app.post("/api/matches", isAuthenticated, isAdmin, async (req, res) => {
-  try {
-    // Force content type to be JSON
-    res.setHeader('Content-Type', 'application/json');
-    
-    // Extract data from request
-    const { team1, team2, venue, status } = req.body;
-    
-    // Validate required fields
-    if (!team1 || !team2) {
-      return res.status(400).json({ 
+    try {
+      // Force content type to be JSON
+      res.setHeader('Content-Type', 'application/json');
+      
+      // Extract data from request
+      const { team1, team2, venue, status } = req.body;
+      
+      // Validate required fields
+      if (!team1 || !team2) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Team 1 and Team 2 names are required" 
+        });
+      }
+      
+      // Prepare match data with defaults
+      const matchData = {
+        team1,
+        team2,
+        venue: venue || "Default Venue",
+        status: status || "upcoming"
+      };
+      
+      // Create the match
+      const newMatch = await storage.createMatch(matchData);
+      
+      // Return success response
+      return res.status(201).json({
+        success: true,
+        message: "Match created successfully",
+        match: newMatch
+      });
+    } catch (error) {
+      console.error("Error creating match:", error);
+      return res.status(500).json({ 
         success: false,
-        message: "Team 1 and Team 2 names are required" 
+        message: "Failed to create match",
+        error: String(error)
       });
     }
-    
-    // Prepare match data with defaults
-    const matchData = {
-      team1,
-      team2,
-      venue: venue || "Default Venue",
-      status: status || "upcoming"
-    };
-    
-    // Create the match
-    const newMatch = await storage.createMatch(matchData);
-    
-    // Return success response
-    return res.status(201).json({
-      success: true,
-      message: "Match created successfully",
-      match: newMatch
-    });
-  } catch (error) {
-    console.error("Error creating match:", error);
-    return res.status(500).json({ 
-      success: false,
-      message: "Failed to create match",
-      error: String(error)
-    });
-  }
-});
+  });
 
   // Update match status (admin only)
- app.patch("/api/matches/:id/status", isAuthenticated, isAdmin, async (req, res) => {
-  try {
-    // Force content type to be JSON
-    res.setHeader('Content-Type', 'application/json');
-    
-    const matchId = parseInt(req.params.id);
-    const { status } = req.body;
-    if (!status || typeof status !== 'string' || !['live', 'completed', 'upcoming'].includes(status)) {
-      return res.status(400).json({ 
+  app.patch("/api/matches/:id/status", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      // Force content type to be JSON
+      res.setHeader('Content-Type', 'application/json');
+      
+      const matchId = parseInt(req.params.id);
+      const { status } = req.body;
+      
+      if (!status || typeof status !== 'string' || !['live', 'completed', 'upcoming'].includes(status)) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Invalid status value. Must be 'live', 'completed', or 'upcoming'" 
+        });
+      }
+      
+      const updatedMatch = await storage.updateMatchStatus(matchId, status);
+      return res.json({
+        success: true,
+        message: "Match status updated successfully",
+        match: updatedMatch
+      });
+    } catch (error) {
+      console.error("Error updating match status:", error);
+      return res.status(500).json({ 
         success: false,
-        message: "Invalid status value. Must be 'live', 'completed', or 'upcoming'" 
+        message: "Failed to update match status",
+        error: String(error)
       });
     }
-    const updatedMatch = await storage.updateMatchStatus(matchId, status);
-    return res.json({
-      success: true,
-      message: "Match status updated successfully",
-      match: updatedMatch
-    });
-  } catch (error) {
-    console.error("Error updating match status:", error);
-    return res.status(500).json({ 
-      success: false,
-      message: "Failed to update match status",
-      error: String(error)
-    });
-  }
-});
-// Create a new contest (admin only) - FIXED to prevent doctype error
-app.post("/api/contests", isAuthenticated, isAdmin, async (req, res) => {
-  try {
-    // Force content type to be JSON
-    res.setHeader('Content-Type', 'application/json');
-    
-    const { name, description, rules, prizePool, entryFee, maxEntries, isLive } = req.body;
-    
-    // Validate required fields
-    if (!name) {
-      return res.status(400).json({ 
-        success: false,
-        message: "Contest name is required" 
-      });
-    }
+  });
+
   // Contest routes
   // Get all contests
   app.get("/api/contests", async (req, res) => {
@@ -342,50 +330,50 @@ app.post("/api/contests", isAuthenticated, isAdmin, async (req, res) => {
   });
 
   // Create a new contest (admin only)
- app.post("/api/contests", isAuthenticated, isAdmin, async (req, res) => {
-  try {
-    // Force content type to be JSON
-    res.setHeader('Content-Type', 'application/json');
-    
-    const { name, description, rules, prizePool, entryFee, maxEntries, isLive } = req.body;
-    
-    // Validate required fields
-    if (!name) {
-      return res.status(400).json({ 
+  app.post("/api/contests", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      // Force content type to be JSON
+      res.setHeader('Content-Type', 'application/json');
+      
+      const { name, description, rules, prizePool, entryFee, maxEntries, isLive } = req.body;
+      
+      // Validate required fields
+      if (!name) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Contest name is required" 
+        });
+      }
+      
+      // Prepare contest data with defaults
+      const contestData = {
+        name,
+        description: description || "",
+        rules: rules || "",
+        prizePool: prizePool !== undefined ? Number(prizePool) : 0,
+        entryFee: entryFee !== undefined ? Number(entryFee) : 0,
+        maxEntries: maxEntries !== undefined ? Number(maxEntries) : 100,
+        isLive: isLive === true
+      };
+      
+      // Create the contest
+      const newContest = await storage.createContest(contestData);
+      
+      // Return success response
+      return res.status(201).json({
+        success: true,
+        message: "Contest created successfully",
+        contest: newContest
+      });
+    } catch (error) {
+      console.error("Error creating contest:", error);
+      return res.status(500).json({ 
         success: false,
-        message: "Contest name is required" 
+        message: "Failed to create contest",
+        error: String(error)
       });
     }
-    
-    // Prepare contest data with defaults
-    const contestData = {
-      name,
-      description: description || "",
-      rules: rules || "",
-      prizePool: prizePool !== undefined ? Number(prizePool) : 0,
-      entryFee: entryFee !== undefined ? Number(entryFee) : 0,
-      maxEntries: maxEntries !== undefined ? Number(maxEntries) : 100,
-      isLive: isLive === true
-    };
-    
-    // Create the contest
-    const newContest = await storage.createContest(contestData);
-    
-    // Return success response
-    return res.status(201).json({
-      success: true,
-      message: "Contest created successfully",
-      contest: newContest
-    });
-  } catch (error) {
-    console.error("Error creating contest:", error);
-    return res.status(500).json({ 
-      success: false,
-      message: "Failed to create contest",
-      error: String(error)
-    });
-  }
-});
+  });
 
   // Update a contest (admin only)
   app.patch("/api/contests/:id", isAuthenticated, isAdmin, async (req, res) => {
@@ -395,10 +383,15 @@ app.post("/api/contests", isAuthenticated, isAdmin, async (req, res) => {
       const contestData = req.body;
 
       const updatedContest = await storage.updateContest(contestId, contestData);
-      return res.json(updatedContest);
+      return res.json({
+        success: true,
+        message: "Contest updated successfully",
+        contest: updatedContest
+      });
     } catch (error) {
       console.error("Error updating contest:", error);
       return res.status(500).json({ 
+        success: false,
         message: "Failed to update contest",
         error: String(error)
       });
@@ -411,10 +404,14 @@ app.post("/api/contests", isAuthenticated, isAdmin, async (req, res) => {
       res.setHeader('Content-Type', 'application/json');
       const contestId = parseInt(req.params.id);
       await storage.deleteContest(contestId);
-      return res.status(204).send();
+      return res.status(200).json({
+        success: true,
+        message: "Contest deleted successfully"
+      });
     } catch (error) {
       console.error("Error deleting contest:", error);
       return res.status(500).json({ 
+        success: false,
         message: "Failed to delete contest",
         error: String(error)
       });
@@ -423,44 +420,39 @@ app.post("/api/contests", isAuthenticated, isAdmin, async (req, res) => {
 
   // Toggle contest live status (admin only)
   app.patch("/api/contests/:id/status", isAuthenticated, isAdmin, async (req, res) => {
-  try {
-    res.setHeader('Content-Type', 'application/json');
-    const contestId = parseInt(req.params.id);
-    const { isLive } = req.body;
-    if (isLive === undefined || typeof isLive !== 'boolean') {
-      return res.status(400).json({ 
+    try {
+      res.setHeader('Content-Type', 'application/json');
+      const contestId = parseInt(req.params.id);
+      const { isLive } = req.body;
+
+      if (isLive === undefined || typeof isLive !== 'boolean') {
+        return res.status(400).json({ 
+          success: false,
+          message: "isLive must be a boolean" 
+        });
+      }
+
+      const updatedContest = await storage.setContestLiveStatus(contestId, isLive);
+      return res.json({
+        success: true,
+        message: "Contest status updated successfully",
+        contest: updatedContest
+      });
+    } catch (error) {
+      console.error("Error updating contest status:", error);
+      return res.status(500).json({ 
         success: false,
-        message: "isLive must be a boolean" 
+        message: "Failed to update contest status",
+        error: String(error)
       });
     }
-    const updatedContest = await storage.setContestLiveStatus(contestId, isLive);
-    return res.json({
-      success: true,
-      message: "Contest status updated successfully",
-      contest: updatedContest
-    });
-  } catch (error) {
-    console.error("Error updating contest status:", error);
-    return res.status(500).json({ 
-      success: false,
-      message: "Failed to update contest status",
-      error: String(error)
-    });
-  }
-});
-
+  });
 
   // Get all players
   app.get("/api/players", async (req, res) => {
     try {
       res.setHeader('Content-Type', 'application/json');
       const players = await storage.getPlayers();
-      
-      // Debug log to check data
-      if (players.length > 0) {
-        console.log("Sample player data:", JSON.stringify(players[0], null, 2));
-      }
-      
       return res.json(players);
     } catch (error) {
       console.error("Error fetching players:", error);
@@ -474,12 +466,6 @@ app.post("/api/contests", isAuthenticated, isAdmin, async (req, res) => {
       res.setHeader('Content-Type', 'application/json');
       const categoryId = parseInt(req.params.id);
       const players = await storage.getPlayersByCategory(categoryId);
-      
-      // Debug log to check data
-      if (players.length > 0) {
-        console.log(`Sample player data for category ${categoryId}:`, JSON.stringify(players[0], null, 2));
-      }
-      
       return res.json(players);
     } catch (error) {
       console.error("Error fetching players by category:", error);
@@ -489,45 +475,118 @@ app.post("/api/contests", isAuthenticated, isAdmin, async (req, res) => {
 
   // Update player performance points (admin only)
   app.put("/api/players/:id", isAuthenticated, isAdmin, async (req, res) => {
-  try {
-    // Force content type to be JSON for both request and response
-    res.setHeader('Content-Type', 'application/json');
-    
-    const playerId = parseInt(req.params.id);
-    const { points } = req.body;
-    // Validate points
-    if (points === undefined || points === null) {
-      return res.status(400).json({ 
+    try {
+      // Force content type to be JSON for both request and response
+      res.setHeader('Content-Type', 'application/json');
+      
+      const playerId = parseInt(req.params.id);
+      const { points } = req.body;
+
+      // Validate points
+      if (points === undefined || points === null) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Points are required" 
+        });
+      }
+      
+      const pointsNumber = Number(points);
+      if (isNaN(pointsNumber)) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Points must be a number" 
+        });
+      }
+
+      // Update player points
+      const updatedPlayer = await storage.updatePlayerPoints(playerId, pointsNumber);
+      
+      // Return successful response
+      return res.status(200).json({
+        success: true,
+        message: "Player points updated successfully",
+        player: updatedPlayer
+      });
+    } catch (error) {
+      console.error("Error updating player points:", error);
+      return res.status(500).json({ 
         success: false,
-        message: "Points are required" 
+        message: "Failed to update player points",
+        error: String(error)
       });
     }
-    
-    const pointsNumber = Number(points);
-    if (isNaN(pointsNumber)) {
-      return res.status(400).json({ 
+  });
+
+  // Update all player scores (admin batch update)
+  app.post("/api/players/update-scores", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      // Force content type to be JSON
+      res.setHeader('Content-Type', 'application/json');
+      
+      const updates = req.body;
+      
+      if (!Array.isArray(updates)) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Expected an array of player score updates" 
+        });
+      }
+      
+      const results = [];
+      
+      // Process each update
+      for (const update of updates) {
+        if (!update.playerId || update.points === undefined) {
+          results.push({
+            success: false,
+            playerId: update.playerId,
+            message: "Player ID and points are required"
+          });
+          continue;
+        }
+        
+        try {
+          const playerId = Number(update.playerId);
+          const points = Number(update.points);
+          
+          if (isNaN(playerId) || isNaN(points)) {
+            results.push({
+              success: false,
+              playerId: update.playerId,
+              message: "Player ID and points must be numbers"
+            });
+            continue;
+          }
+          
+          const updatedPlayer = await storage.updatePlayerPoints(playerId, points);
+          results.push({
+            success: true,
+            playerId: playerId,
+            player: updatedPlayer
+          });
+        } catch (updateError) {
+          results.push({
+            success: false,
+            playerId: update.playerId,
+            message: String(updateError)
+          });
+        }
+      }
+      
+      return res.status(200).json({
+        success: true,
+        results: results
+      });
+    } catch (error) {
+      console.error("Error updating player scores:", error);
+      return res.status(500).json({ 
         success: false,
-        message: "Points must be a number" 
+        message: "Failed to update player scores",
+        error: String(error)
       });
     }
-    // Update player points
-    const updatedPlayer = await storage.updatePlayerPoints(playerId, pointsNumber);
-    
-    // Return successful response
-    return res.status(200).json({
-      success: true,
-      message: "Player points updated successfully",
-      player: updatedPlayer
-    });
-  } catch (error) {
-    console.error("Error updating player points:", error);
-    return res.status(500).json({ 
-      success: false,
-      message: "Failed to update player points",
-      error: String(error)
-    });
-  }
-});
+  });
+
   // Get player selection stats
   app.get("/api/players/stats/selection", async (req, res) => {
     try {
@@ -699,7 +758,10 @@ app.post("/api/contests", isAuthenticated, isAdmin, async (req, res) => {
       }
       
       await storage.deleteTeamById(teamId);
-      return res.status(204).send();
+      return res.status(200).json({
+        success: true,
+        message: "Team deleted successfully"
+      });
     } catch (error) {
       console.error("Error deleting team:", error);
       return res.status(500).json({ message: "Failed to delete team" });
