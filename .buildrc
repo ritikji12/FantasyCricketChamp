@@ -1,0 +1,11 @@
+# Use npm instead of yarn
+export RENDER_USING_NPM=true
+
+# Tell Vite to use the Render-specific configuration
+export VITE_CONFIG_PATH=vite.render.config.js
+
+# Prevent esbuild from trying to use top-level await
+export NODE_OPTIONS='--no-experimental-fetch --no-experimental-repl-await'
+
+# Fix ESM/CJS compatibility issues
+export NODE_PRESERVE_SYMLINKS=1
