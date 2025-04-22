@@ -1,9 +1,9 @@
 
-const express = require("express");
-const session = require("express-session");
-const { registerRoutes } = require("./routes");
-const { apiErrorHandler, apiContentTypeMiddleware } = require("./middleware");
-const { setPlayerCreditPoints } = require("./set-player-credits");
+import express from "express";
+import session from "express-session";
+import { registerRoutes } from "./routes";
+import { apiErrorHandler, apiContentTypeMiddleware } from "./middleware";
+import { setPlayerCreditPoints } from "./set-player-credits";
 
 // Create Express application
 const app = express();
@@ -16,7 +16,7 @@ app.use(apiErrorHandler);
 app.use(apiContentTypeMiddleware);
 
 // Global error handler
-app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+app.use((err, req, res, _next) => {
   console.error(err.stack);
   
   // Ensure we don't send HTML error pages for API requests
@@ -48,8 +48,6 @@ async function startServer() {
   }
 }
 
-// Start server if this is the main module
-// Start server immediately since we're using ES modules
 if (require.main === module) {
   startServer().catch(err => {
     console.error("Failed to start server:", err);
@@ -57,4 +55,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { startServer };
+export { startServer };
