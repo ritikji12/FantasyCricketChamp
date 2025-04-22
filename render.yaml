@@ -2,8 +2,12 @@ services:
   - type: web
     name: fantasy-cricket-champ
     env: node
-    buildCommand: node build-fix.cjs
-    startCommand: NODE_ENV=production node --experimental-modules run.mjs
+    buildCommand: |
+      # Set up package.json for ESM compatibility
+      node render-setup.cjs
+      # Run the build script from package.json
+      npm run build
+    startCommand: NODE_ENV=production node dist/index.js
     envVars:
       - key: NODE_ENV
         value: production
