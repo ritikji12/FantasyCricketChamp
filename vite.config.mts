@@ -1,4 +1,4 @@
-// vite.config.mjs - This is an ESM version of the config for Render
+// vite.config.mts - This is an ESM version of the config for Render
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
