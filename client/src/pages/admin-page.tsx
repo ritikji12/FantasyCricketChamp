@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { updatePlayerPointsSchema } from '@shared/schema';
+import { useAdminTools } from '@/hooks/use-admin-tools';
 
 // Define type for player updates
 type UpdatePlayerPoints = {
@@ -27,6 +28,7 @@ export default function AdminPage() {
   const { user, isAdmin } = useAuth();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { setPlayerCredits, isLoading: isSettingCredits } = useAdminTools();
   
   // State for new match form
   const [newMatch, setNewMatch] = useState({
@@ -218,7 +220,10 @@ export default function AdminPage() {
         isLive: false // Default to not live
       };
       
-      const res = await apiRequest("POST", "/api/contests", serverData);
+      // Make sure to include credentials for authentication
+      const res = await apiRequest("POST", "/api/contests", serverData, {
+        credentials: 'include'
+      });
       return await res.json();
     },
     onSuccess: () => {
@@ -587,6 +592,15 @@ export default function AdminPage() {
                                   disabled={match.status === 'completed' || updateMatchStatusMutation.isPending}
                                 >
                                   Complete
+                                </Button>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                                  onClick={() => updateMatchStatusMutation.mutate({ matchId: match.id, status: 'upcoming' })}
+                                  disabled={match.status === 'upcoming' || updateMatchStatusMutation.isPending}
+                                >
+                                  Not Live
                                 </Button>
                               </div>
                             </td>
