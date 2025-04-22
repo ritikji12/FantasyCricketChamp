@@ -37,17 +37,16 @@ export async function comparePasswords(supplied: string, stored: string) {
 }
 
 export function setupAuth(app: Express) {
-  const sessionSecret = process.env.SESSION_SECRET || 'cricket-fantasy-secret-key';
-  
   const sessionSettings: session.SessionOptions = {
-    secret: sessionSecret,
+    secret: process.env.SESSION_SECRET || 'fantasy-app-secret',
     resave: false,
     saveUninitialized: false,
-    store: storage.sessionStore,
     cookie: {
-      secure: false, // Set to true in production with HTTPS
-      maxAge: 1000 * 60 * 60 * 24 * 7 // 1 week
-    }
+      maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production'
+    },
+    store: storage.sessionStore,
   };
 
   app.use(session(sessionSettings));
@@ -59,28 +58,79 @@ export function setupAuth(app: Express) {
       try {
         const user = await storage.getUserByUsername(username);
         if (!user || !(await comparePasswords(password, user.password))) {
-          return done(null, false, { message: "Invalid username or password" });
+          return done(null, false);
+        } else {
+          return done(null, user);
         }
-        return done(null, user);
-      } catch (err) {
-        return done(err);
+      } catch (error) {
+        return done(error);
       }
-    })
+    }),
   );
 
   passport.serializeUser((user, done) => {
     done(null, user.id);
   });
-
+  
   passport.deserializeUser(async (id: number, done) => {
     try {
       const user = await storage.getUser(id);
       done(null, user);
-    } catch (err) {
-      done(err);
+    } catch (error) {
+      done(error);
     }
   });
 
+  // Login route
+  app.post("/api/login", (req, res, next) => {
+    // Set content type for response
+    res.setHeader('Content-Type', 'application/json');
+    
+    passport.authenticate('local', (err, user, info) => {
+      if (err) {
+        return next(err);
+      }
+      if (!user) {
+        return res.status(401).json({ message: 'Invalid username or password' });
+      }
+      req.login(user, (err) => {
+        if (err) {
+          return next(err);
+        }
+        return res.status(200).json(user);
+      });
+    })(req, res, next);
+  });
+
+  // Register route
+  app.post("/api/register", async (req, res, next) => {
+    // Set content type for response
+    res.setHeader('Content-Type', 'application/json');
+    
+    try {
+      const existingUser = await storage.getUserByUsername(req.body.username);
+      if (existingUser) {
+        return res.status(400).json({ message: "Username already exists" });
+      }
+
+      const user = await storage.createUser({
+        ...req.body,
+        password: await hashPassword(req.body.password),
+      });
+ 
+
+
+  // Get current user
+  app.get("/api/user", (req, res) => {
+    // Set content type for response
+    res.setHeader('Content-Type', 'application/json');
+    
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    res.json(req.user);
+  });
+}
   app.post("/api/register", async (req, res, next) => {
     try {
       // Check if username already exists
@@ -126,9 +176,15 @@ export function setupAuth(app: Express) {
         return res.status(401).json({ message: info?.message || "Authentication failed" });
       }
       
-      req.login(user, (err: Error | null) => {
+      req.login(user, (err) => {
         if (err) return next(err);
-        
+        res.status(201).json(user);
+      });
+    } catch (error) {
+      console.error("Registration error:", error);
+      res.status(500).json({ message: "Registration failed", error: String(error) });
+    }
+  });
         // Remove password from response
         const { password, ...userWithoutPassword } = user;
         return res.status(200).json(userWithoutPassword);
@@ -136,8 +192,12 @@ export function setupAuth(app: Express) {
     })(req, res, next);
   });
 
+  // Logout route
   app.post("/api/logout", (req, res, next) => {
-    req.logout((err: Error | null) => {
+    // Set content type for response
+    res.setHeader('Content-Type', 'application/json');
+    
+    req.logout((err) => {
       if (err) return next(err);
       res.sendStatus(200);
     });
