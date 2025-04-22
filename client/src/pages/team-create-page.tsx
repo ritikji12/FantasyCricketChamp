@@ -89,7 +89,7 @@ export default function TeamCreatePage() {
   const totalCredits = React.useMemo(() => {
     return selectedPlayers.reduce((total, playerId) => {
       const player = players.find(p => p.id === playerId);
-      return total + (player?.points || 0);
+      return total + (player?.creditPoints || player?.points || 0);
     }, 0);
   }, [selectedPlayers, players]);
   
@@ -125,7 +125,16 @@ export default function TeamCreatePage() {
       wicketkeeper: string,
       totalCredits: number
     }) => {
-      const res = await apiRequest("POST", "/api/teams", data);
+      // Convert to the format expected by the server
+      const serverData = {
+        name: data.teamName,
+        contestId: 1, // Default contest ID
+        playerIds: data.playerIds,
+        captain: data.captainId,
+        viceCaptain: data.viceCaptainId
+      };
+      
+      const res = await apiRequest("POST", "/api/teams", serverData);
       return await res.json();
     },
     onSuccess: () => {
@@ -159,7 +168,7 @@ export default function TeamCreatePage() {
       } else {
         // Check if adding would exceed 1000 credits
         const playerToAdd = players.find(p => p.id === playerId);
-        const newTotal = totalCredits + (playerToAdd?.points || 0);
+        const newTotal = totalCredits + (playerToAdd?.creditPoints || playerToAdd?.points || 0);
         
         if (newTotal > 1000) {
           toast({
