@@ -224,67 +224,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Create a new match (admin only)
   app.post("/api/matches", isAuthenticated, isAdmin, async (req, res) => {
-    try {
-      // Make sure the content type is properly set
-      res.setHeader('Content-Type', 'application/json');
-      
-      // Validate and parse the incoming data
-      const matchData = req.body;
-      
-      // Basic validation
-      if (!matchData.team1 || !matchData.team2) {
-        return res.status(400).json({ 
-          message: "Invalid match data", 
-          errors: "Both team1 and team2 are required" 
-        });
-      }
-      
-      // Set default values if not provided
-      const processedMatchData = {
-        team1: matchData.team1,
-        team2: matchData.team2,
-        status: matchData.status || 'upcoming',
-        venue: matchData.venue || 'Default Stadium'
-      };
-      
-      // Create the match using storage
-      const newMatch = await storage.createMatch(processedMatchData);
-      
-      // Return JSON response
-      return res.status(201).json(newMatch);
-    } catch (error) {
-      console.error("Error creating match:", error);
-      return res.status(500).json({ 
-        message: "Failed to create match", 
-        error: String(error)
+  try {
+    // Force content type to be JSON
+    res.setHeader('Content-Type', 'application/json');
+    
+    // Extract data from request
+    const { team1, team2, venue, status } = req.body;
+    
+    // Validate required fields
+    if (!team1 || !team2) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Team 1 and Team 2 names are required" 
       });
     }
-  });
+    
+    // Prepare match data with defaults
+    const matchData = {
+      team1,
+      team2,
+      venue: venue || "Default Venue",
+      status: status || "upcoming"
+    };
+    
+    // Create the match
+    const newMatch = await storage.createMatch(matchData);
+    
+    // Return success response
+    return res.status(201).json({
+      success: true,
+      message: "Match created successfully",
+      match: newMatch
+    });
+  } catch (error) {
+    console.error("Error creating match:", error);
+    return res.status(500).json({ 
+      success: false,
+      message: "Failed to create match",
+      error: String(error)
+    });
+  }
+});
 
   // Update match status (admin only)
-  app.patch("/api/matches/:id/status", isAuthenticated, isAdmin, async (req, res) => {
-    try {
-      // Set content type explicitly
-      res.setHeader('Content-Type', 'application/json');
-      
-      const matchId = parseInt(req.params.id);
-      const { status } = req.body;
-
-      if (typeof status !== 'string' || !['live', 'completed', 'upcoming'].includes(status)) {
-        return res.status(400).json({ message: "Invalid status value" });
-      }
-
-      const updatedMatch = await storage.updateMatchStatus(matchId, status);
-      return res.json(updatedMatch);
-    } catch (error) {
-      console.error("Error updating match status:", error);
-      return res.status(500).json({ 
-        message: "Failed to update match status",
-        error: String(error)
+ app.patch("/api/matches/:id/status", isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    // Force content type to be JSON
+    res.setHeader('Content-Type', 'application/json');
+    
+    const matchId = parseInt(req.params.id);
+    const { status } = req.body;
+    if (!status || typeof status !== 'string' || !['live', 'completed', 'upcoming'].includes(status)) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Invalid status value. Must be 'live', 'completed', or 'upcoming'" 
       });
     }
-  });
-
+    const updatedMatch = await storage.updateMatchStatus(matchId, status);
+    return res.json({
+      success: true,
+      message: "Match status updated successfully",
+      match: updatedMatch
+    });
+  } catch (error) {
+    console.error("Error updating match status:", error);
+    return res.status(500).json({ 
+      success: false,
+      message: "Failed to update match status",
+      error: String(error)
+    });
+  }
+});
+// Create a new contest (admin only) - FIXED to prevent doctype error
+app.post("/api/contests", isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    // Force content type to be JSON
+    res.setHeader('Content-Type', 'application/json');
+    
+    const { name, description, rules, prizePool, entryFee, maxEntries, isLive } = req.body;
+    
+    // Validate required fields
+    if (!name) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Contest name is required" 
+      });
+    }
   // Contest routes
   // Get all contests
   app.get("/api/contests", async (req, res) => {
@@ -317,28 +342,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create a new contest (admin only)
-  app.post("/api/contests", isAuthenticated, isAdmin, async (req, res) => {
-    try {
-      // Set content type header
-      res.setHeader('Content-Type', 'application/json');
-      
-      const contestData = req.body;
-      
-      // Basic validation
-      if (!contestData.name) {
-        return res.status(400).json({ message: "Contest name is required" });
-      }
-      
-      const newContest = await storage.createContest(contestData);
-      return res.status(201).json(newContest);
-    } catch (error) {
-      console.error("Error creating contest:", error);
-      return res.status(500).json({ 
-        message: "Failed to create contest",
-        error: String(error)
+ app.post("/api/contests", isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    // Force content type to be JSON
+    res.setHeader('Content-Type', 'application/json');
+    
+    const { name, description, rules, prizePool, entryFee, maxEntries, isLive } = req.body;
+    
+    // Validate required fields
+    if (!name) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Contest name is required" 
       });
     }
-  });
+    
+    // Prepare contest data with defaults
+    const contestData = {
+      name,
+      description: description || "",
+      rules: rules || "",
+      prizePool: prizePool !== undefined ? Number(prizePool) : 0,
+      entryFee: entryFee !== undefined ? Number(entryFee) : 0,
+      maxEntries: maxEntries !== undefined ? Number(maxEntries) : 100,
+      isLive: isLive === true
+    };
+    
+    // Create the contest
+    const newContest = await storage.createContest(contestData);
+    
+    // Return success response
+    return res.status(201).json({
+      success: true,
+      message: "Contest created successfully",
+      contest: newContest
+    });
+  } catch (error) {
+    console.error("Error creating contest:", error);
+    return res.status(500).json({ 
+      success: false,
+      message: "Failed to create contest",
+      error: String(error)
+    });
+  }
+});
 
   // Update a contest (admin only)
   app.patch("/api/contests/:id", isAuthenticated, isAdmin, async (req, res) => {
@@ -376,25 +423,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Toggle contest live status (admin only)
   app.patch("/api/contests/:id/status", isAuthenticated, isAdmin, async (req, res) => {
-    try {
-      res.setHeader('Content-Type', 'application/json');
-      const contestId = parseInt(req.params.id);
-      const { isLive } = req.body;
-
-      if (typeof isLive !== 'boolean') {
-        return res.status(400).json({ message: "isLive must be a boolean" });
-      }
-
-      const updatedContest = await storage.setContestLiveStatus(contestId, isLive);
-      return res.json(updatedContest);
-    } catch (error) {
-      console.error("Error updating contest status:", error);
-      return res.status(500).json({ 
-        message: "Failed to update contest status",
-        error: String(error)
+  try {
+    res.setHeader('Content-Type', 'application/json');
+    const contestId = parseInt(req.params.id);
+    const { isLive } = req.body;
+    if (isLive === undefined || typeof isLive !== 'boolean') {
+      return res.status(400).json({ 
+        success: false,
+        message: "isLive must be a boolean" 
       });
     }
-  });
+    const updatedContest = await storage.setContestLiveStatus(contestId, isLive);
+    return res.json({
+      success: true,
+      message: "Contest status updated successfully",
+      contest: updatedContest
+    });
+  } catch (error) {
+    console.error("Error updating contest status:", error);
+    return res.status(500).json({ 
+      success: false,
+      message: "Failed to update contest status",
+      error: String(error)
+    });
+  }
+});
+
 
   // Get all players
   app.get("/api/players", async (req, res) => {
@@ -435,27 +489,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Update player performance points (admin only)
   app.put("/api/players/:id", isAuthenticated, isAdmin, async (req, res) => {
-    try {
-      res.setHeader('Content-Type', 'application/json');
-      
-      const playerId = parseInt(req.params.id);
-      const { points } = req.body;
-
-      if (typeof points !== 'number') {
-        return res.status(400).json({ message: "Points must be a number" });
-      }
-
-      const updatedPlayer = await storage.updatePlayerPoints(playerId, points);
-      return res.json(updatedPlayer);
-    } catch (error) {
-      console.error("Error updating player points:", error);
-      return res.status(500).json({ 
-        message: "Failed to update player points",
-        error: String(error)
+  try {
+    // Force content type to be JSON for both request and response
+    res.setHeader('Content-Type', 'application/json');
+    
+    const playerId = parseInt(req.params.id);
+    const { points } = req.body;
+    // Validate points
+    if (points === undefined || points === null) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Points are required" 
       });
     }
-  });
-
+    
+    const pointsNumber = Number(points);
+    if (isNaN(pointsNumber)) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Points must be a number" 
+      });
+    }
+    // Update player points
+    const updatedPlayer = await storage.updatePlayerPoints(playerId, pointsNumber);
+    
+    // Return successful response
+    return res.status(200).json({
+      success: true,
+      message: "Player points updated successfully",
+      player: updatedPlayer
+    });
+  } catch (error) {
+    console.error("Error updating player points:", error);
+    return res.status(500).json({ 
+      success: false,
+      message: "Failed to update player points",
+      error: String(error)
+    });
+  }
+});
   // Get player selection stats
   app.get("/api/players/stats/selection", async (req, res) => {
     try {
