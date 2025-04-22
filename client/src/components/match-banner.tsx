@@ -3,10 +3,13 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 
 export default function MatchBanner() {
-  // Fetch current match
-  const { data: match, isLoading } = useQuery({
-    queryKey: ['/api/match/current'],
+  // Fetch live match
+  const { data: matches, isLoading } = useQuery({
+    queryKey: ['/api/matches/live'],
   });
+  
+  // Get the first live match
+  const match = Array.isArray(matches) && matches.length > 0 ? matches[0] : null;
 
   return (
     <Card className="shadow-md">
