@@ -1,53 +1,69 @@
-import express from "express";
-import session from "express-session";
-import { registerRoutes } from "./routes.js";
-import { apiErrorHandler, apiContentTypeMiddleware } from "./middleware.js";
-import { setPlayerCreditPoints } from "./set-player-credits.js";
+import express, { type Request, Response, NextFunction } from "express";
+import { registerRoutes } from "./routes";
+import { setupVite, serveStatic, log } from "./vite";
 
-// Create Express application
 const app = express();
-
-// Parse JSON request bodies
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
-// Apply middleware to ensure proper API response handling
-app.use(apiErrorHandler);
-app.use(apiContentTypeMiddleware);
+app.use((req, res, next) => {
+  const start = Date.now();
+  const path = req.path;
+  let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
-// Global error handler
-app.use((err, req, res, _next) => {
-  console.error(err.stack);
+  const originalResJson = res.json;
+  res.json = function (bodyJson, ...args) {
+    capturedJsonResponse = bodyJson;
+    return originalResJson.apply(res, [bodyJson, ...args]);
+  };
 
-  res.setHeader("Content-Type", "application/json");
-  res.status(500).json({
-    success: false,
-    message: "Internal server error",
-    error: err.message,
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    if (path.startsWith("/api")) {
+      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+      if (capturedJsonResponse) {
+        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      }
+
+      if (logLine.length > 80) {
+        logLine = logLine.slice(0, 79) + "…";
+      }
+
+      log(logLine);
+    }
   });
+
+  next();
 });
 
-// Register application routes and start server
-export async function startServer() {
+(async () => {
   const server = await registerRoutes(app);
-  const port = process.env.PORT || 3000;
 
-  server.listen(port, () => {
-    console.log(`🚀 Server running on port ${port}`);
+  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    const status = err.status || err.statusCode || 500;
+    const message = err.message || "Internal Server Error";
+
+    res.status(status).json({ message });
+    throw err;
   });
 
-  try {
-    console.log("Running player credit points setup...");
-    await setPlayerCreditPoints();
-    console.log("✅ Player credit points setup completed successfully.");
-  } catch (error) {
-    console.error("❌ Failed to set player credit points:", error);
+  // importantly only setup vite in development and after
+  // setting up all the other routes so the catch-all route
+  // doesn't interfere with the other routes
+  if (app.get("env") === "development") {
+    await setupVite(app, server);
+  } else {
+    serveStatic(app);
   }
-}
 
-// ✅ ESM way to check if file is run directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  startServer().catch((err) => {
-    console.error("❌ Failed to start server:", err);
-    process.exit(1);
+  // Use PORT environment variable if available (for Render deployment)
+  // otherwise default to port 5000 for local development
+  const port = process.env.PORT || 5000;
+  server.listen({
+    port: Number(port),
+    host: "0.0.0.0",
+    reusePort: true,
+  }, () => {
+    log(`serving on port ${port}`);
   });
-}
+})();
