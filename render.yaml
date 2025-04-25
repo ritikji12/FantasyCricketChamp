@@ -2,8 +2,9 @@ services:
   - type: web
     name: fantasy-cricket-champ
     env: node
-    buildCommand: node render-setup.cjs
-    startCommand: NODE_ENV=production node server-wrapper.js
+    nodeVersion: 16.19.1
+    buildCommand: node fix-build.js
+    startCommand: NODE_ENV=production node dist/index.js
     envVars:
       - key: NODE_ENV
         value: production
